@@ -1,3 +1,4 @@
+//#region Constantes e variáveis principais
 const divMapa = document.getElementById("mapa");
 const svgMapaObject = document.getElementById("mapaSVG");
 const divBarraSuperior = document.getElementById("barraSuperior");
@@ -14,6 +15,19 @@ const pturno = document.getElementById("turno");
 const botaoRodarTurno = document.getElementById("botaoRodarTurno");
 const divListaTerritoriosJogadores = document.getElementById("listaTerritoriosJogadores");
 const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
+
+const gameStates = {
+	STANDBY: "STANDBY",
+	ESTADOSELECIONADO: "ESTADOSELECIONADO",
+	ATACARESTADO: "ATACARESTADO",
+	CONSTRUIRMURO: "CONSTRUIRMURO",
+	AGUARDAR: "AGUARDAR",
+}
+const tiposAcoes = {
+	ATAQUE: "atq",
+	REFORCO: "ref",
+	DEFESA: "def",
+}
 
 var mapaEscala = 1;
 var mapaPosX = 0;
@@ -35,27 +49,21 @@ var intervalosTurnos = null;
 var tempoTurnos = 2000;
 var acelerar = false;
 
-const gameStates = {
-	STANDBY: "STANDBY",
-	ESTADOSELECIONADO: "ESTADOSELECIONADO",
-	ATACARESTADO: "ATACARESTADO",
-	CONSTRUIRMURO: "CONSTRUIRMURO",
-	AGUARDAR: "AGUARDAR",
-}
 var gameState = gameStates.STANDBY;
-const tiposAcoes = {
-	ATAQUE: "atq",
-	REFORCO: "ref",
-	DEFESA: "def",
-}
 
 var svgMapa = null;
+
 svgMapaObject.onload = (e)=>{
 	if (!inicializado) {
 		console.log("Mapa pronto");
 		//inicializar();
 	}
 }
+//#endregion
+
+
+
+
 
 //#region Classes
 
@@ -314,6 +322,8 @@ class Jogador {
 
 
 
+
+
 //#region Funções
 function moverMapa(argX,argY,argRelativo = true) {
 	if (argRelativo) {
@@ -507,15 +517,17 @@ function hslToHex(h,s,l,debug=false) {
 		b.toString(16).padStart(2,"0");
 }
 function clicarEstado(argEstado) {
-	if (gameState == gameStates.ESTADOSELECIONADO) {
-		if (estadoSelecionado!=null) {
-			estadoSelecionado.svg.classList.remove("selecao");
-			estadoSelecionado = null;
+	if (gameState != gameStates.AGUARDAR) {
+		if (gameState == gameStates.ESTADOSELECIONADO) {
+			if (estadoSelecionado!=null) {
+				estadoSelecionado.svg.classList.remove("selecao");
+				estadoSelecionado = null;
+			}
 		}
+		estadoSelecionadoAntes = estadoSelecionado;
+		estadoSelecionado = argEstado;
+		definirGameState(gameStates.ESTADOSELECIONADO);
 	}
-	estadoSelecionadoAntes = estadoSelecionado;
-	estadoSelecionado = argEstado;
-	definirGameState(gameStates.ESTADOSELECIONADO);
 }
 function definirGameState(argGameState,argVoltar = false) {
 	switch (argGameState) {
@@ -590,24 +602,38 @@ function definirGameState(argGameState,argVoltar = false) {
 			} else {
 				estadoSelecionado.svg.classList.add("selecao");
 			}
-			let texto = "";
-			
-			let textoLocal = document.createElement("p");
-			textoLocal.innerHTML = estadoSelecionado.nome;
-
-			let imagemEstado = document.createElement("img");
-			imagemEstado.src = "estrutura/" + estadoSelecionado.controlador.imagem;
-			imagemEstado.title = estadoSelecionado.controlador.nome;
-			imagemEstado.classList.add("bandeira");
-
-			let pEstado = document.createElement("p");
-			pEstado.innerHTML = "Controlado por: ";
-
 			spanStatus.innerHTML="";
-			spanStatus.appendChild(textoLocal);
-			pEstado.appendChild(imagemEstado);
-			spanStatus.appendChild(pEstado);
 			
+			let textoLocal = null;
+			textoLocal = document.createElement("p");
+			textoLocal.innerHTML = estadoSelecionado.nome + " <img class='bandeira' src='estrutura/" + estadoSelecionado.imagem + "' title='" + estadoSelecionado.nome + "'>";
+			spanStatus.appendChild(textoLocal);
+
+			textoLocal = document.createElement("p");
+			textoLocal.innerHTML = "Controlado por: <img class='bandeira' src='estrutura/" + estadoSelecionado.controlador.imagem + "' title='" + estadoSelecionado.controlador.nome + "'>";
+			spanStatus.appendChild(textoLocal);
+
+			textoLocal = document.createElement("p");
+			textoLocal.innerHTML = "Vidas: " + "♥".repeat(estadoSelecionado.vida);
+			spanStatus.appendChild(textoLocal);
+
+			textoLocal = document.createElement("p");
+			textoLocal.innerHTML = `Acesso ao mar: ${estadoSelecionado.acessoAgua ? "Sim" : "Não"}`;
+			spanStatus.appendChild(textoLocal);
+
+			textoLocal = document.createElement("p");
+			textoLocal.innerHTML = "Vizinhos: ";
+			estadoSelecionado.vizinhos.forEach(vizinho => {
+				let imgVizinho = document.createElement("img");
+				imgVizinho.src = "estrutura/" + vizinho.imagem;
+				imgVizinho.classList.add("bandeira");
+				imgVizinho.title = vizinho.nome;
+				textoLocal.appendChild(imgVizinho);
+			});
+			spanStatus.appendChild(textoLocal);
+			
+			
+
 
 			if (estadoSelecionado.controlador==jogador) {
 				let botoes = divBotoesAcoes.getElementsByTagName("button");
@@ -818,8 +844,6 @@ async function inicializar() {
 	dialogEscolhaJogador.showModal();
 	//new Acao(estados[4],tiposAcoes.ATAQUE,estados[8]);
 }
-
-
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{
 	if (svgMapaObject.contentDocument.readyState === 'complete' && !inicializado) {
