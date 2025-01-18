@@ -457,6 +457,7 @@ function definirJogador(argJogador=null) {
 		divBarraInferior.style.borderColor = estadoJogador.cor;
 		divBarraInferior.style.backgroundImage = "url('estrutura/" + estadoJogador.imagem + "')";
 		divAcoes.style.borderColor = estadoJogador.cor;
+		divAcoes.style.backgroundColor = estadoJogador.cor;
 
 		atualizarBarraStatus();
 		
