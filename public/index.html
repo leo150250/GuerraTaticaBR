@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Guerra Tática BR</title>
+	<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+	<div id="wrapper">
+		<div id="barraSuperior" class="barra">
+			<div id="cabecalhoJogador">
+				<img src="#" title="Jogador" id="imagemJogador">
+				<p id="pJogador">AAAA</p>
+			</div>
+			<img src="estrutura/GuerraTaticaBR.svg" title="Guerra Tática BR" class="logo">
+			<p id="turno">
+				Turno
+			</p>
+		</div>
+		<div id="mapa">
+			<object id="mapaSVG" type="image/svg+xml" data="estrutura/brazil.svg"></object>
+		</div>
+		<div id="acoes">
+			<span id="status">Status</span>
+			<hr>
+			<span id="numAcoes">NumAcoes</span>
+			<div id="botoesAcoes">
+				<button title="Reforçar" type="button" onclick="acaoReforcar()">🛡</button>
+				<button title="Atacar" type="button" onclick="acaoAtacar()">🎯</button>
+				<button title="Proteger" type="button" onclick="acaoConstruir()">🧱</button>
+				<button class="botaoCancelar" title="Cancelar" type="button" onclick="acaoCancelar()">Cancelar</button>
+			</div>
+			<div id="listaAcoes">
+				
+			</div>
+			<button id="botaoRodarTurno" onclick="rodarTurno()">RODAR TURNO</button>
+		</div>
+		<div id="barraInferior" class="barra">Barra Inferior</div>
+	</div>
+	<dialog id="dialogEscolhaJogador">
+		<p>Escolha seu território</p>
+		<div id="listaTerritoriosJogadores"></div>
+	</dialog>
+	<script src="guerraTaticaBR.js"></script>
+</body>
+</html>

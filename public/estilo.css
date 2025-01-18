@@ -1,0 +1,226 @@
+:root {
+	--agua: #aaccff;
+}
+body {
+	width: 100vw;
+	height: 100vh;
+	margin: 0;
+	font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+}
+hr {
+	margin: 0.5rem;
+}
+img.bandeira {
+	box-shadow: 0px 1px 3px #0008;
+	max-width: 2rem;
+}
+img.logo {
+	position: absolute;
+	width: 100px;
+	top: 0px;
+	left: calc(50% - (50px));
+	z-index: 1;
+	filter: drop-shadow(0px 2px 6px #0008);
+}
+button {
+	padding: 0.5rem;
+	cursor: pointer;
+	border-radius: 3px;
+	background-color: #EEE;
+	border: 1px outset #DDD;
+}
+button:hover {
+	background-color: #DDD;
+}
+button:disabled {
+	background-color: #EEE;
+	cursor: not-allowed;
+}
+dialog {
+	width: calc(100% - 10rem);
+	max-height: calc(100% - 10rem);
+	background-color: #0008;
+	color: #FFF;
+	text-align: center;
+	border: 1px solid #8888;
+	border-radius: 10px;
+	box-shadow: 0px 5px 10px #0008;
+}
+dialog::backdrop {
+	backdrop-filter: blur(2px) contrast(0.25);
+}
+#wrapper {
+	position: absolute;
+	width: 100vw;
+	height: 100vh;
+}
+.barra {
+	grid-column: 1 / 3;
+	background-color: #333;
+	background-position: center;
+	background-size: cover;
+	background-blend-mode: multiply;
+	color: white;
+	padding: 0.5rem;
+	position: absolute;
+	width: 100%;
+	box-sizing: border-box;
+}
+#barraSuperior {
+	border-bottom-width: 2px;
+	border-bottom-style: ridge;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	height: 3rem;
+	top: 0px;
+}
+#barraSuperior div {
+	display: flex;
+	align-items: center;
+}
+#barraSuperior p {
+	margin: 0.5rem;
+}
+#barraInferior {
+	bottom: 0px;
+	border-top-width: 2px;
+	border-top-style: ridge;
+	overflow-y: scroll;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	padding: 0;
+	height: 10rem;
+}
+#barraInferior .log {
+	display: flex;
+	align-items: stretch;
+	margin: 0;
+	border-bottom: 1px solid #8884;
+}
+#barraInferior .log p {
+	margin: 0.5rem;
+}
+#barraInferior .log p.horario {
+	background-color: #8884;
+	padding: 0.25rem;
+	font-size: 0.5rem;
+	width: 3rem;
+	margin: 0;
+	align-content: center;
+}
+#mapa {
+	background-color: var(--agua);
+	overflow: hidden;
+	position: absolute;
+	top: 3rem;
+	left: 0px;
+	width: calc(100% - 15rem);
+	height: calc(100% - 3rem - 10rem);
+	perspective: 300px;
+}
+#mapaSVG {
+	position: absolute;
+	transition: 1s ease-in-out;
+	transition-property: transform, left, top;
+}
+#acoes {
+	background-color: #e4e4e4;
+	border-left-width: 2px;
+	border-left-style: ridge;
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	width: 15rem;
+	top: 3rem;
+	right: 0px;
+	padding: 0.5rem;
+	flex-grow: 0;
+	box-sizing: border-box;
+	height: calc(100% - 3rem - 10rem);
+}
+#acoes #status {
+	display: flex;
+	flex-direction: column;
+}
+#acoes #status p {
+	margin: 0px;
+}
+#listaAcoes {
+	background-color: #c4c4c4;
+	overflow-y: scroll;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	flex-grow: 2;
+	margin: 0.5rem -0.5rem;
+}
+#listaAcoes .acao {
+	display: flex;
+	align-items: center;
+	justify-content: space-evenly;
+	border-bottom: solid 1px #b0b0b0;
+	border-top: solid 1px #d0d0d0;
+	position: relative;
+}
+#listaAcoes .acao * {
+	margin: 0.5rem;
+}
+#listaAcoes .acao img {
+	height: 1rem;
+	object-fit: contain;
+}
+#listaAcoes .acao.invalida {
+	background-color: #000;
+	opacity: 0.25;
+}
+#listaAcoes .acao.executando {
+	background-color: #178511;
+	color: #FFF;
+	border-color: #25b81d;	
+}
+#botoesAcoes {
+	display: flex;
+	flex-wrap: wrap;
+}
+#botoesAcoes button {
+	flex-grow: 2;
+	&.botaoCancelar {
+		display: none;
+	}
+}
+#botoesAcoes.cancelar button {
+	display: none;
+	&.botaoCancelar {
+		display: block;
+	}
+}
+#botaoRodarTurno {
+	background-color: #178511;
+	color: #FFF;
+	font-weight: bold;
+	border-color: #25b81d;
+}
+#botaoRodarTurno:disabled {
+	background-color: #EEE;
+	border-color: #DDD;
+	color: #888;
+}
+#listaTerritoriosJogadores {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.25rem;
+}
+#listaTerritoriosJogadores button {
+	flex-basis: 100px;
+	flex-shrink: 0;
+}
+#listaTerritoriosJogadores button img {
+	width: 30px;
+}
+#listaTerritoriosJogadores button p {
+	margin: 0.25rem;
+}
