@@ -213,7 +213,7 @@ class Acao {
 						} else {
 							this.destino.vida -= 1;
 							this.destino.atualizarSVG();
-							logExecucao("Ataque do território de " + this.origem.nome + " ao território de " + this.destino.nome + " sob controle de " + this.destino.controlador.nome + ".",this.origem.controlador);
+							logExecucao("Ataque " + (this.agua ? "marítimo " : "") + "do território de " + this.origem.nome + " ao território de " + this.destino.nome + " sob controle de " + this.destino.controlador.nome + ".", this.origem.controlador);
 						}
 					}
 					if (this.destino.vida == 0) {
@@ -554,10 +554,15 @@ function definirGameState(argGameState,argVoltar = false) {
 						vizinho.svg.classList.remove("murar");
 					});
 				} else {
+					let ataquePorAgua = false;
 					if (!estadoSelecionadoAntes.vizinhos.includes(estadoSelecionado)) {
-						alert("O estado selecionado não é vizinho do estado anterior.");
-						estadoSelecionado = estadoSelecionadoAntes;
-						return;
+						if (gameState == gameStates.ATACARESTADO && estadoSelecionadoAntes.acessoAgua && estadoSelecionado.acessoAgua) {
+							ataquePorAgua = true;
+						} else {
+							alert("O território selecionado não é acessível por este território.");
+							estadoSelecionado = estadoSelecionadoAntes;
+							return;
+						}
 					}
 					if ((estadoSelecionadoAntes.controlador === estadoSelecionado.controlador)
 						&& (gameState == gameStates.ATACARESTADO)) {
@@ -569,7 +574,7 @@ function definirGameState(argGameState,argVoltar = false) {
 						if (muros.some(muro => 
 							(muro.estado1 === estadoSelecionadoAntes && muro.estado2 === estadoSelecionado) || 
 							(muro.estado1 === estadoSelecionado && muro.estado2 === estadoSelecionadoAntes))) {
-							alert("Já existe um muro entre esses estados!");
+							alert("Já existe um muro entre esses territórios!");
 							estadoSelecionado = estadoSelecionadoAntes;
 							return;
 						}
@@ -590,11 +595,18 @@ function definirGameState(argGameState,argVoltar = false) {
 						return;
 					}
 					divBotoesAcoes.classList.remove("cancelar");
-					new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado);
+					new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado,ataquePorAgua);
 					estadoSelecionadoAntes.vizinhos.forEach(vizinho => {
 						vizinho.svg.classList.remove("atacar");
 						vizinho.svg.classList.remove("murar");
 					});
+					if (estadoSelecionado.acessoAgua) {
+						estados.forEach(estado => {
+							if (estado.acessoAgua) {
+								estado.svg.classList.remove("atacar");
+							}
+						});
+					}
 					estadoSelecionado = estadoSelecionadoAntes;
 					definirGameState(gameStates.STANDBY,true);
 					return;
@@ -656,6 +668,13 @@ function definirGameState(argGameState,argVoltar = false) {
 					vizinho.svg.classList.add("atacar");
 				}
 			});
+			if (estadoSelecionado.acessoAgua) {
+				estados.forEach(estado => {
+					if (estado.acessoAgua) {
+						estado.svg.classList.add("atacar");
+					}
+				});
+			}
 		} break;
 		case gameStates.CONSTRUIRMURO: {
 			divBotoesAcoes.classList.add("cancelar");
@@ -767,19 +786,36 @@ function executarCPUs() {
 			const vidaTotal = estadosControlados.reduce((total, estado) => total + estado.vida, 0);
 			const numAcoesMax = Math.ceil(vidaTotal / qtdAmpliaAcoes);
 			let numAcoes = 0;
+			let iteracoes = 0;
 
 			while (numAcoes < numAcoesMax) {
+				if (iteracoes > 10) {
+					break;
+				}
 				const tipoAcao = Object.values(tiposAcoes)[Math.floor(Math.random() * Object.values(tiposAcoes).length)];
 				const estadoOrigem = estadosControlados[Math.floor(Math.random() * estadosControlados.length)];
 
 				if (tipoAcao === tiposAcoes.REFORCO && estadoOrigem.vida < 3) {
 					new Acao(estadoOrigem, tiposAcoes.REFORCO);
 					numAcoes++;
+					iteracoes = 0;
 				} else if (tipoAcao === tiposAcoes.ATAQUE) {
-					const estadoDestino = estadoOrigem.vizinhos[Math.floor(Math.random() * estadoOrigem.vizinhos.length)];
+					let estadoDestino = estadoOrigem.vizinhos[Math.floor(Math.random() * estadoOrigem.vizinhos.length)];
+
+					if (estadoOrigem.acessoAgua) {
+						const estadosComAcessoAoMar = estados.filter(estado => estado.acessoAgua && estado !== estadoOrigem);
+						const todosEstadosPossiveis = [...estadoOrigem.vizinhos, ...estadosComAcessoAoMar];
+						estadoDestino = todosEstadosPossiveis[Math.floor(Math.random() * todosEstadosPossiveis.length)];
+					}
+
 					if (estadoDestino.controlador !== jogadorCPU) {
-						new Acao(estadoOrigem, tiposAcoes.ATAQUE, estadoDestino);
+						let ataquePorAgua = false;
+						if (!estadoOrigem.vizinhos.includes(estadoDestino)) {
+							ataquePorAgua = true;
+						}
+						new Acao(estadoOrigem, tiposAcoes.ATAQUE, estadoDestino, ataquePorAgua);
 						numAcoes++;
+						iteracoes = 0;
 					}
 				} else if (tipoAcao === tiposAcoes.DEFESA) {
 					const estadoDestino = estadoOrigem.vizinhos[Math.floor(Math.random() * estadoOrigem.vizinhos.length)];
@@ -788,8 +824,10 @@ function executarCPUs() {
 						(muro.estado1 === estadoDestino && muro.estado2 === estadoOrigem))) {
 						new Acao(estadoOrigem, tiposAcoes.DEFESA, estadoDestino);
 						numAcoes++;
+						iteracoes = 0;
 					}
 				}
+				iteracoes++;
 			}
 		}
 	});
