@@ -333,8 +333,8 @@ function moverMapa(argX,argY,argRelativo = true) {
 		mapaPosX = argX;
 		mapaPosY = argY;
 	}
-	svgMapaObject.style.left = -mapaPosX + "px";
-	svgMapaObject.style.top = -mapaPosY + "px";
+	svgMapaObject.style.left = mapaPosX + "px";
+	svgMapaObject.style.top = mapaPosY + "px";
 }
 function zoomMapa(argZoom = 0) {
 	if (argZoom === -0) {
@@ -345,35 +345,36 @@ function zoomMapa(argZoom = 0) {
 		let scaleX = parentWidth / mapaWidth;
 		let scaleY = parentHeight / mapaHeight;
 
-		mapaEscala = Math.min(scaleX, scaleY);
-		moverMapa(
-			-(divMapa.clientWidth - svgMapaObject.clientWidth) / 2,
-			-(divMapa.clientHeight - svgMapaObject.clientHeight) / 2,
-			false
-		);
+		let novoZoom = Math.min(scaleX, scaleY);
+		mapaEscala = novoZoom;
+		let posX = ((mapaWidth * novoZoom) / 2) - (divMapa.clientWidth / 2);
+		let posY = ((mapaHeight * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+		moverMapa(-posX, -posY, false);
 	} else {
 		mapaEscala = argZoom;
-		if (mapaEscala < 0.5) mapaEscala = 0.5;
-		if (mapaEscala > 2) mapaEscala = 2;
 	}
 	svgMapaObject.style.transform = `scale(${mapaEscala}) rotateX(${mapaRotX}deg)`;
 }
 function focarEstado(argEstado) {
-	if (acelerar) {
-		return;
+    let estadoBBox = argEstado.svg.getBBox();
+    let mapaBBox = svgMapa.getBBox();
+    let estadoBBoxN = {
+        x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
+        y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
+        width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
+        height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
+    };
+    let scaleX = divMapa.clientWidth / estadoBBoxN.width;
+    let scaleY = divMapa.clientHeight / estadoBBoxN.height;
+    let novoZoom = Math.min(scaleX, scaleY);
+	if (novoZoom > 2) {
+		novoZoom = 2;
 	}
-	zoomMapa(1);
-	let estadoBBox = argEstado.svg.getBBox();
-	let mapaBBox = svgMapa.getBBox();
-	let estadoBBoxN = {
-		x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
-		y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
-		width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
-		height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
-	};
-	let posX = estadoBBoxN.x + (estadoBBoxN.width / 2) - (divMapa.offsetWidth/2);
-	let posY = estadoBBoxN.y + (estadoBBoxN.height / 2) - (divMapa.offsetHeight/2);
-	moverMapa(posX,posY,false);
+    zoomMapa(novoZoom);
+    let posX = (estadoBBoxN.x * novoZoom) + ((estadoBBoxN.width * novoZoom) / 2) - (divMapa.clientWidth / 2);
+    let posY = (estadoBBoxN.y * novoZoom) + ((estadoBBoxN.height * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+	console.log(posX);
+    moverMapa(-posX, -posY, false);
 }
 async function iniciarEstados() {
 	const estrutura = [
@@ -752,7 +753,7 @@ function* etapaTurno() {
 	for (let i = 0; i < acoes.length; i++) {
 		if (acoes[i].executar()) {
 			acoes[i].origem.svg.classList.add("destacar1");
-			if (acoes[i].destino != null) {
+			if (acoes[i].tipo == tiposAcoes.ATAQUE) {
 				acoes[i].destino.svg.classList.add("destacar2");
 			}
 			acoes[i].el.classList.add("executando");
@@ -761,7 +762,7 @@ function* etapaTurno() {
 			yield;
 			acoes[i].el.classList.remove("executando");
 			acoes[i].origem.svg.classList.remove("destacar1");
-			if (acoes[i].destino != null) {
+			if (acoes[i].tipo == tiposAcoes.ATAQUE) {
 				acoes[i].destino.svg.classList.remove("destacar2");
 			}
 		}
@@ -878,8 +879,9 @@ async function inicializar() {
 	logExecucao("Bem-vindo ao GuerraTaticaBR!");
 	pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
 	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	zoomMapa(0);
 	console.log("Jogo pronto!");
+	//focarEstado(estados[0]);
+	zoomMapa(0);
 	dialogEscolhaJogador.showModal();
 	//new Acao(estados[4],tiposAcoes.ATAQUE,estados[8]);
 }

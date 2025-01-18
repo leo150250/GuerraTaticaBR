@@ -205,8 +205,22 @@
 	50% { fill: #F00; }
 }
 @keyframes animMurar {
-	0% { stroke-dashOffset: 0% }
-	100% { stroke-dashOffset: 100%; }
+	0% { stroke-dashOffset: 0px }
+	100% { stroke-dashOffset: 7500px; }
+}
+@keyframes animMuro {
+   0% { stroke-opacity: 0 }
+   100% { stroke-opacity: 0 }
+}
+@keyframes animAtaque {
+	0% { fill: #F00; }
+   10% { fill: unset; }
+   20% { fill: #F00; }
+   30% { fill: unset; }
+   40% { fill: #F00; }
+}
+@keyframes animDestaque {
+	0% { fill: #FFF; }
 }
 .selecao {
 	animation: animSelecao 0.5s infinite;
@@ -223,10 +237,12 @@
 .destacar1 {
    stroke: #0F0;
    stroke-width: 1000px;
+   animation: animDestaque 1s forwards;
 }
 .destacar2 {
    stroke: #F00;
    stroke-width: 1000px;
+   animation: animAtaque 1s forwards;
 }
 </style>
     <linearGradient
