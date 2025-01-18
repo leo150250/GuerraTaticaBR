@@ -16,27 +16,21 @@
 
 ---
 
-<p align="center"> Guerra Tática BR é um jogo de estratégia em turnos onde jogadores comandam exércitos em batalhas táticas. O objetivo é derrotar o exército inimigo usando planejamento estratégico, posicionamento tático e habilidades especiais das unidades. O jogo oferece gráficos detalhados e jogabilidade profunda, ideal para fãs de jogos de estratégia.
-    <br> 
+<p align="center">
+  Link para acesso online: <br>
+  <a href="https://leo150250.github.io/GuerraTaticaBR/">https://leo150250.github.io/GuerraTaticaBR/</a>
 </p>
 
 ## 📝 Sumário
 
 - [Sobre](#about)
-- [Começando](#getting_started)
-- [Implantação](#deployment)
-- [Uso](#usage)
 - [Construído Usando](#built_using)
-- [TODO](../TODO.md)
-- [Contribuindo](../CONTRIBUTING.md)
 - [Autores](#authors)
 - [Agradecimentos](#acknowledgement)
 
 ## 🧐 Sobre <a name = "about"></a>
 
 Guerra Tática BR é um jogo de estratégia em turnos onde jogadores comandam exércitos em batalhas táticas. O objetivo é derrotar o exército inimigo usando planejamento estratégico, posicionamento tático e habilidades especiais das unidades. O jogo oferece gráficos detalhados e jogabilidade profunda, ideal para fãs de jogos de estratégia.
-
-
 
 ### Técnicas e Linguagens Utilizadas
 
