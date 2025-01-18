@@ -425,6 +425,14 @@ async function iniciarEstados() {
 				}
 			}
 			svgElementMur.style.display = "none";
+			let svgElementDef = svgMapa.getElementById(`def_${estado.id}-${vizinho.id}`);
+			if (svgElementDef==null) {
+				svgElementDef = svgMapa.getElementById(`def_${vizinho.id}-${estado.id}`);
+				if (svgElementDef==null) {
+					console.log("Não achei o ícone de defesa de " + estado.id + " com " + vizinho.id);
+				}
+			}
+			svgElementDef.style.display = "none";
 		});
 		if (estado.acessoAgua) {
 			let svgElementIn = svgMapa.getElementById(`atqMarIn_${estado.id}`);
@@ -433,6 +441,7 @@ async function iniciarEstados() {
 			svgElementOut.style.display = "none";
 		}
 	});
+	svgMapa.getElementById("Defesas").style.display = null;
 	svgMapa.getElementById("Muros").style.display = null;
 	svgMapa.getElementById("Reforcos").style.display = null;
 	svgMapa.getElementById("Ataques").style.display = null;
@@ -880,10 +889,8 @@ async function inicializar() {
 	pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
 	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
 	console.log("Jogo pronto!");
-	//focarEstado(estados[0]);
 	zoomMapa(0);
 	dialogEscolhaJogador.showModal();
-	//new Acao(estados[4],tiposAcoes.ATAQUE,estados[8]);
 }
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{
