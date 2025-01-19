@@ -15,6 +15,9 @@ const pturno = document.getElementById("turno");
 const botaoRodarTurno = document.getElementById("botaoRodarTurno");
 const divListaTerritoriosJogadores = document.getElementById("listaTerritoriosJogadores");
 const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
+const divOverlayMapa = document.getElementById("overlayMapa");
+const divOverlayRanking = document.getElementById("overlayRanking");
+const divOverlayAviso = document.getElementById("overlayAviso");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -42,12 +45,17 @@ var numAcoesMax = 0;
 var numAcoes = 0;
 var qtdAmpliaAcoes = 5;
 var inicializado = false;
+var numTerritoriosConquistadosJogador = 0;
+var numTerritoriosPerdidosJogador = 0;
 
 var dataTurno = new Date(new Date().getFullYear() + 2, 0, 1);
 var etapasTurnos = null;
 var intervalosTurnos = null;
 var tempoTurnos = 2000;
 var acelerar = false;
+var iteracoesPausa = 0;
+var numTurnos = 0;
+var autoRodar = false;
 
 var gameState = gameStates.STANDBY;
 
@@ -220,8 +228,14 @@ class Acao {
 						this.destino.vida = 1;
 						this.destino.atualizarControlador(this.origem.controlador);
 						logExecucao("O território de " + this.destino.nome + " foi conquistado por " + this.origem.controlador.nome + ".",this.origem.controlador);
+						if (this.origem.controlador == jogador) {
+							numTerritoriosConquistadosJogador++;
+						}
+						if (this.destino.controlador == jogador) {
+							numTerritoriosPerdidosJogador++;
+						}
 						acoes.filter(acao => acao.origem === this.destino).forEach(acao => acao.invalidar());
-						verificarJogadores();
+						//verificarJogadores();
 					}
 				} break;
 				case tiposAcoes.DEFESA: {
@@ -271,6 +285,7 @@ class Muro {
 			this.svg = svgMapa.getElementById(this.svgId);
 		}
 		this.svg.style.display = null;
+		this.svg.style.animation = "animMuro 2s forwards";
 		muros.push(this);
 	}
 	destruirMuro() {
@@ -333,8 +348,8 @@ function moverMapa(argX,argY,argRelativo = true) {
 		mapaPosX = argX;
 		mapaPosY = argY;
 	}
-	svgMapaObject.style.left = -mapaPosX + "px";
-	svgMapaObject.style.top = -mapaPosY + "px";
+	svgMapaObject.style.left = mapaPosX + "px";
+	svgMapaObject.style.top = mapaPosY + "px";
 }
 function zoomMapa(argZoom = 0) {
 	if (argZoom === -0) {
@@ -345,35 +360,38 @@ function zoomMapa(argZoom = 0) {
 		let scaleX = parentWidth / mapaWidth;
 		let scaleY = parentHeight / mapaHeight;
 
-		mapaEscala = Math.min(scaleX, scaleY);
-		moverMapa(
-			-(divMapa.clientWidth - svgMapaObject.clientWidth) / 2,
-			-(divMapa.clientHeight - svgMapaObject.clientHeight) / 2,
-			false
-		);
+		let novoZoom = Math.min(scaleX, scaleY);
+		mapaEscala = novoZoom;
+		let posX = ((mapaWidth * novoZoom) / 2) - (divMapa.clientWidth / 2);
+		let posY = ((mapaHeight * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+		moverMapa(-posX, -posY, false);
 	} else {
 		mapaEscala = argZoom;
-		if (mapaEscala < 0.5) mapaEscala = 0.5;
-		if (mapaEscala > 2) mapaEscala = 2;
 	}
 	svgMapaObject.style.transform = `scale(${mapaEscala}) rotateX(${mapaRotX}deg)`;
 }
 function focarEstado(argEstado) {
-	if (acelerar) {
-		return;
+	if (!acelerar) {
+		let estadoBBox = argEstado.svg.getBBox();
+		let mapaBBox = svgMapa.getBBox();
+		let estadoBBoxN = {
+			x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
+			y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
+			width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
+			height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
+		};
+		let scaleX = divMapa.clientWidth / estadoBBoxN.width;
+		let scaleY = divMapa.clientHeight / estadoBBoxN.height;
+		let novoZoom = Math.min(scaleX, scaleY);
+		if (novoZoom > 2) {
+			novoZoom = 2;
+		}
+		zoomMapa(novoZoom);
+		let posX = (estadoBBoxN.x * novoZoom) + ((estadoBBoxN.width * novoZoom) / 2) - (divMapa.clientWidth / 2);
+		let posY = (estadoBBoxN.y * novoZoom) + ((estadoBBoxN.height * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+		console.log(posX);
+		moverMapa(-posX, -posY, false);
 	}
-	zoomMapa(1);
-	let estadoBBox = argEstado.svg.getBBox();
-	let mapaBBox = svgMapa.getBBox();
-	let estadoBBoxN = {
-		x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
-		y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
-		width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
-		height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
-	};
-	let posX = estadoBBoxN.x + (estadoBBoxN.width / 2) - (divMapa.offsetWidth/2);
-	let posY = estadoBBoxN.y + (estadoBBoxN.height / 2) - (divMapa.offsetHeight/2);
-	moverMapa(posX,posY,false);
 }
 async function iniciarEstados() {
 	const estrutura = [
@@ -424,6 +442,14 @@ async function iniciarEstados() {
 				}
 			}
 			svgElementMur.style.display = "none";
+			let svgElementDef = svgMapa.getElementById(`def_${estado.id}-${vizinho.id}`);
+			if (svgElementDef==null) {
+				svgElementDef = svgMapa.getElementById(`def_${vizinho.id}-${estado.id}`);
+				if (svgElementDef==null) {
+					console.log("Não achei o ícone de defesa de " + estado.id + " com " + vizinho.id);
+				}
+			}
+			svgElementDef.style.display = "none";
 		});
 		if (estado.acessoAgua) {
 			let svgElementIn = svgMapa.getElementById(`atqMarIn_${estado.id}`);
@@ -432,6 +458,7 @@ async function iniciarEstados() {
 			svgElementOut.style.display = "none";
 		}
 	});
+	svgMapa.getElementById("Defesas").style.display = null;
 	svgMapa.getElementById("Muros").style.display = null;
 	svgMapa.getElementById("Reforcos").style.display = null;
 	svgMapa.getElementById("Ataques").style.display = null;
@@ -457,6 +484,7 @@ function definirJogador(argJogador=null) {
 		divBarraInferior.style.borderColor = estadoJogador.cor;
 		divBarraInferior.style.backgroundImage = "url('estrutura/" + estadoJogador.imagem + "')";
 		divAcoes.style.borderColor = estadoJogador.cor;
+		divAcoes.style.backgroundColor = estadoJogador.cor;
 
 		atualizarBarraStatus();
 		
@@ -468,14 +496,20 @@ function definirJogador(argJogador=null) {
 	}
 }
 function atualizarBarraStatus() {
-	imagemJogador.src = "estrutura/" + estadoJogador.imagem;
-	imagemJogador.classList.add("bandeira");
-	let texto = "";
-	const estadosControlados = estados.filter(estado => estado.controlador === jogador).length;
-	const vidaTotal = estados.filter(estado => estado.controlador === jogador)
-								.reduce((total, estado) => total + estado.vida, 0);
-	texto += `${estadoJogador.nome} | Estados controlados: ${estadosControlados} (${vidaTotal})`;
-	pJogador.innerHTML = texto;
+	if (jogador == null) {
+		imagemJogador.style.display = "none";
+		pJogador.innerHTML = "Guerra Tática BR";
+	} else {
+		imagemJogador.style.display = null;
+		imagemJogador.src = "estrutura/" + jogador.imagem;
+		imagemJogador.classList.add("bandeira");
+		let texto = "";
+		const estadosControlados = estados.filter(estado => estado.controlador === jogador).length;
+		const vidaTotal = estados.filter(estado => estado.controlador === jogador)
+									.reduce((total, estado) => total + estado.vida, 0);
+		texto += `${estadoJogador.nome} | Estados controlados: ${estadosControlados} (${vidaTotal})`;
+		pJogador.innerHTML = texto;
+	}
 }
 function hslToHex(h,s,l,debug=false) {
 	// Must be fractions of 1
@@ -734,6 +768,8 @@ function rodarTurno() {
 	logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
 	definirGameState(gameStates.AGUARDAR);
 	etapasTurnos = etapaTurno();
+	exibirOverlayInicio();
+	numTurnos++;
 	intervalosTurnos = setInterval(()=>{
 		etapasTurnos.next();
 	}, tempoTurnos);
@@ -751,22 +787,26 @@ function* etapaTurno() {
 	for (let i = 0; i < acoes.length; i++) {
 		if (acoes[i].executar()) {
 			acoes[i].origem.svg.classList.add("destacar1");
-			if (acoes[i].destino != null) {
+			if (acoes[i].tipo == tiposAcoes.ATAQUE) {
 				acoes[i].destino.svg.classList.add("destacar2");
 			}
 			acoes[i].el.classList.add("executando");
 			acoes[i].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 			atualizarBarraStatus();
+			atualizarOverlayRanking();
 			yield;
+			verificarJogadores();
+			for (let j = 0; j < iteracoesPausa; j++) {
+				yield;
+			}
+			iteracoesPausa = 0;
 			acoes[i].el.classList.remove("executando");
 			acoes[i].origem.svg.classList.remove("destacar1");
-			if (acoes[i].destino != null) {
+			if (acoes[i].tipo == tiposAcoes.ATAQUE) {
 				acoes[i].destino.svg.classList.remove("destacar2");
 			}
 		}
 	}
-
-	verificarJogadores();
 
 	acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
 
@@ -777,6 +817,9 @@ function* etapaTurno() {
 	zoomMapa(0);
 	atualizarQuantidadeDeAcoes();
 	clearInterval(intervalosTurnos);
+	if (autoRodar) {
+		rodarTurno();
+	}
 }
 function executarCPUs() {
 	logExecucao("Silêncio... O computador está pensando...");
@@ -833,14 +876,28 @@ function executarCPUs() {
 	});
 }
 function verificarJogadores() {
-	jogadores.forEach(jogador => {
-		if (!jogador.derrotado) {
-			const estadosControlados = estados.filter(estado => estado.controlador === jogador).length;
+	jogadores.forEach(jogadorVerificar => {
+		if (!jogadorVerificar.derrotado) {
+			const estadosControlados = estados.filter(estado => estado.controlador === jogadorVerificar).length;
 			if (estadosControlados === 0) {
-				jogador.perder();
+				jogadorVerificar.perder();
+				exibirOverlayDerrota(jogadorVerificar);
+				if (jogadorVerificar === jogador) {
+					clearInterval(intervalosTurnos);
+					setTimeout((e)=>{
+						exibirOverlayJogadorPerdeu();
+					}, (tempoTurnos * iteracoesPausa) + 100);
+				}
 			}
 		}
 	});
+	const jogadoresAtivos = jogadores.filter(jogador => !jogador.derrotado);
+	if (jogadoresAtivos.length === 1) {
+		clearInterval(intervalosTurnos);
+		setTimeout((e)=>{
+			exibirOverlayVencedor();
+		}, (tempoTurnos * iteracoesPausa) + 100);
+	}
 }
 function logExecucao(argTexto) {
 	let novoLog = document.createElement("div");
@@ -860,6 +917,157 @@ function logExecucao(argTexto) {
 	novoLog.scrollIntoView({ behavior: 'smooth' });
 	return novoLog;
 }
+function atualizarOverlayRanking() {
+	const jogadoresAtivos = jogadores.filter(jogador => !jogador.derrotado);
+	const ranking = jogadoresAtivos.map(jogador => {
+		const vidas = estados.filter(estado => estado.controlador === jogador)
+							 .reduce((total, estado) => total + estado.vida, 0);
+		return { jogador, vidas };
+	}).sort((a, b) => b.vidas - a.vidas);
+
+	divOverlayRanking.innerHTML = "";
+	ranking.forEach(entry => {
+		const p = document.createElement("p");
+		const img = document.createElement("img");
+		img.src = "estrutura/" + entry.jogador.imagem;
+		img.classList.add("bandeira");
+		img.title = entry.jogador.nome;
+		p.appendChild(img);
+		p.innerHTML += ` ${entry.jogador.nome}: ${entry.vidas}`;
+		divOverlayRanking.appendChild(p);
+	});
+}
+function exibirOverlayDerrota(argJogador) {
+	divOverlayAviso.style.display = "none";
+	divOverlayAviso.classList.add("derrota");
+	iteracoesPausa = 2;
+	const h1 = document.createElement("h1");
+	h1.innerHTML = `${argJogador.nome} foi derrotado!`;
+
+	const img = document.createElement("img");
+	img.style.height = "100px";
+	img.src = "estrutura/" + argJogador.imagem;
+	img.title = argJogador.nome;
+
+	divOverlayAviso.innerHTML = "";
+	divOverlayAviso.appendChild(h1);
+	divOverlayAviso.appendChild(img);
+	divOverlayAviso.style.animation = `animAviso ${tempoTurnos * iteracoesPausa / 2000}s ease-in-out alternate 2`;
+	divOverlayAviso.style.display = "block";
+	setTimeout((e)=>{
+		divOverlayAviso.style.display = "none";
+		divOverlayAviso.classList.remove("derrota");
+	}, tempoTurnos * iteracoesPausa);
+}
+function exibirOverlayInicio() {
+	divOverlayAviso.style.display = "none";
+	divOverlayAviso.classList.add("informe");
+	const h1 = document.createElement("h1");
+	h1.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
+
+	divOverlayAviso.innerHTML = "";
+	divOverlayAviso.appendChild(h1);
+	divOverlayAviso.style.animation = "animAviso 1s ease-in-out alternate 2";
+	divOverlayAviso.style.display = "block";
+	setTimeout((e)=>{
+		divOverlayAviso.style.display = "none";
+		divOverlayAviso.classList.remove("informe");
+	}, 2000);
+}
+function exibirOverlayJogadorPerdeu() {
+	divOverlayAviso.style.display = "none";
+	divOverlayAviso.classList.add("derrota");
+	divOverlayAviso.classList.add("jogador");
+
+	const h1 = document.createElement("h1");
+	h1.innerHTML = "Você foi derrotado!";
+
+	const sumario = exibirSumarioPartida();
+
+	const btnVerFinal = document.createElement("button");
+	btnVerFinal.innerHTML = "Ver Final da Partida";
+	btnVerFinal.onclick = () => {
+		divOverlayAviso.style.animation = null;
+		divOverlayAviso.classList.remove("derrota");
+		divOverlayAviso.classList.remove("jogador");
+		divOverlayAviso.style.display = "none";
+		tempoTurnos = 200;
+		zoomMapa(0);
+		acelerar = true;
+		autoRodar = true;
+		intervalosTurnos = setInterval(()=>{
+			etapasTurnos.next();
+		}, tempoTurnos);
+	};
+
+	const btnReiniciar = document.createElement("button");
+	btnReiniciar.innerHTML = "Reiniciar";
+	btnReiniciar.onclick = () => {
+		location.reload();
+	};
+
+	divOverlayAviso.innerHTML = "";
+	divOverlayAviso.appendChild(h1);
+	divOverlayAviso.appendChild(sumario);
+	divOverlayAviso.appendChild(btnVerFinal);
+	divOverlayAviso.appendChild(btnReiniciar);
+	divOverlayAviso.style.animation = "animAviso 1.5s ease-in-out forwards 1";
+	divOverlayAviso.style.pointerEvents = "all";
+	divOverlayAviso.style.display = "block";
+}
+function exibirOverlayVencedor() {
+	const vencedor = jogadores.find(jogador => !jogador.derrotado);
+
+	divOverlayAviso.style.display = "none";
+	divOverlayAviso.classList.add("vitoria");
+
+	const h1 = document.createElement("h1");
+	h1.innerHTML = `${vencedor.nome} venceu a partida!`;
+
+	const img = document.createElement("img");
+	img.style.height = "100px";
+	img.src = "estrutura/" + vencedor.imagem;
+	img.title = vencedor.nome;
+
+	const sumario = exibirSumarioPartida();
+
+	const btnReiniciar = document.createElement("button");
+	btnReiniciar.innerHTML = "Reiniciar";
+	btnReiniciar.onclick = () => {
+		location.reload();
+	};
+
+	divOverlayAviso.innerHTML = "";
+	divOverlayAviso.appendChild(h1);
+	divOverlayAviso.appendChild(img);
+	divOverlayAviso.appendChild(sumario);
+	divOverlayAviso.appendChild(btnReiniciar);
+	divOverlayAviso.style.animation = "animAviso 1.5s ease-in-out forwards 1";
+	divOverlayAviso.style.pointerEvents = "all";
+	divOverlayAviso.style.display = "block";
+}
+function exibirSumarioPartida() {
+	const divSumario = document.createElement("div");
+	divSumario.classList.add("sumario");
+
+	const titulo = document.createElement("h2");
+	titulo.innerHTML = "Resumo da Partida";
+	divSumario.appendChild(titulo);
+
+	const turnos = document.createElement("p");
+	turnos.innerHTML = `Turnos rodados: ${numTurnos}`;
+	divSumario.appendChild(turnos);
+
+	const conquistas = document.createElement("p");
+	conquistas.innerHTML = `Territórios conquistados: ${numTerritoriosConquistadosJogador}`;
+	divSumario.appendChild(conquistas);
+
+	const perdas = document.createElement("p");
+	perdas.innerHTML = `Territórios perdidos: ${numTerritoriosPerdidosJogador}`;
+	divSumario.appendChild(perdas);
+
+	return divSumario;
+}
 //#endregion
 
 
@@ -877,10 +1085,14 @@ async function inicializar() {
 	logExecucao("Bem-vindo ao GuerraTaticaBR!");
 	pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
 	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	zoomMapa(0);
 	console.log("Jogo pronto!");
+	atualizarBarraStatus();
+	atualizarOverlayRanking();
+	divOverlayAviso.style.display = "none";
+	zoomMapa(0);
 	dialogEscolhaJogador.showModal();
-	//new Acao(estados[4],tiposAcoes.ATAQUE,estados[8]);
+	//rodarTurno();
+	//exibirOverlayJogadorPerdeu();
 }
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{

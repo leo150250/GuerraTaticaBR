@@ -125,8 +125,69 @@ dialog::backdrop {
 }
 #mapaSVG {
 	position: absolute;
-	transition: 1s ease-in-out;
+	transition: 1s cubic-bezier(0.5, 0, 0.5, 1);
 	transition-property: transform, left, top;
+	transform-origin: 0px 0px;
+}
+#mapa #overlayMapa {
+	pointer-events: none;
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	width: 100%;
+	height: 100%;
+	background-color: #0000;
+}
+#mapa #overlayRanking {
+	font-size: 0.75rem;
+}
+#mapa #overlayAviso {
+	pointer-events: none;
+	position: absolute;
+	top: 25%;
+	right: 0px;
+	text-align: center;
+	background-color: #0008;
+	padding: 1rem;
+	overflow: hidden;
+	/* animation: animAviso 1.5s ease-in-out; */
+	text-wrap: nowrap;
+	backdrop-filter: blur(8px);
+	opacity: 0;
+}
+#mapa #overlayAviso.derrota {
+	color: #F00;
+}
+#mapa #overlayAviso.derrota.jogador h1 {
+	color: #000;
+	background-color: #F00;
+}
+#mapa #overlayAviso.vitoria h1 {
+	color: #000;
+	background-color: #FF0;
+}
+#mapa #overlayAviso.informe {
+	color: #000;
+	& h1 {
+		background-color: #FFF;
+	}
+}
+#mapa #overlayAviso h1 {
+	margin: 0.5rem -1rem;
+}
+@keyframes animAviso {
+	0% {
+		opacity: 0;
+		width: 0px;
+	}
+	50% {
+		opacity: 1;
+		width: 100%;
+	}
+	100% {
+		opacity: 1;
+		width: 100%;
+	}
 }
 #acoes {
 	background-color: #e4e4e4;
