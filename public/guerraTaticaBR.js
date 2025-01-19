@@ -587,6 +587,13 @@ function definirGameState(argGameState,argVoltar = false) {
 						vizinho.svg.classList.remove("atacar");
 						vizinho.svg.classList.remove("murar");
 					});
+					if (estadoSelecionado.acessoAgua) {
+						estados.forEach(estado => {
+							if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
+								estado.svg.classList.remove("atacar");
+							}
+						});
+					}
 				} else {
 					let ataquePorAgua = false;
 					if (!estadoSelecionadoAntes.vizinhos.includes(estadoSelecionado)) {
@@ -704,7 +711,7 @@ function definirGameState(argGameState,argVoltar = false) {
 			});
 			if (estadoSelecionado.acessoAgua) {
 				estados.forEach(estado => {
-					if (estado.acessoAgua) {
+					if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
 						estado.svg.classList.add("atacar");
 					}
 				});
