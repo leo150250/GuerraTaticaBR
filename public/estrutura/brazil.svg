@@ -216,8 +216,17 @@
 	100% { stroke-dashOffset: 7500px; }
 }
 @keyframes animMuro {
-   0% { stroke-opacity: 0 }
-   100% { stroke-opacity: 0 }
+   0% {
+      stroke-opacity: 0;
+      stroke-width: 25000px;
+   }
+   50% {
+      stroke-opacity: 0;
+      stroke-width: 25000px;
+   }
+   100% {
+      stroke-opacity: 1;
+   }
 }
 @keyframes animAtaque {
 	0% { fill: #F00; }
@@ -245,11 +254,13 @@
    stroke: #0F0;
    stroke-width: 1000px;
    animation: animDestaque 1s forwards;
+   animation-delay: 1s;
 }
 .destacar2 {
    stroke: #F00;
    stroke-width: 1000px;
    animation: animAtaque 1s forwards;
+   animation-delay: 1s;
 }
 </style>
     <linearGradient
