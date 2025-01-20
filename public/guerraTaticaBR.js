@@ -192,6 +192,13 @@ class Acao {
 			this.el_imagemDestino.title = this.destino.nome;
 			this.el.appendChild(this.el_imagemDestino);
 		}
+		if (this.origem.controlador == jogador) {
+			this.el.classList.add("doJogador");
+		} else if (this.destino!=null) {
+			if (this.destino.controlador == jogador) {
+				this.el.classList.add("aoJogador");
+			}
+		}
 		divListaAcoes.appendChild(this.el);
 
 		acoes.push(this);

@@ -247,6 +247,14 @@ dialog::backdrop {
 	background-color: #000;
 	opacity: 0.25;
 }
+#listaAcoes .acao.doJogador {
+	background-color: #35b7b9;
+	border-color: #4bdddf;
+}
+#listaAcoes .acao.aoJogador {
+	background-color: #fd2727;
+	border-color: #df4b4b;
+}
 #listaAcoes .acao.executando {
 	background-color: #178511;
 	color: #FFF;
