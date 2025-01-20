@@ -126,7 +126,6 @@ class Estado {
 		this.corMatiz = this.controlador.corMatiz;
 		this.corSaturacao = this.controlador.corSaturacao;
 		this.cor = hslToHex(this.corMatiz, this.corSaturacao, 50);
-		this.atualizarSVG();
 	}
 }
 var acoes = [];
@@ -206,7 +205,13 @@ class Acao {
 				case tiposAcoes.REFORCO: {
 					focarEstado(this.origem);
 					this.origem.vida += 1;
-					this.origem.atualizarSVG();
+					if (this.acelerar) {
+						this.origem.atualizarSVG();
+					} else {
+						setTimeout((e)=>{
+							this.origem.atualizarSVG();
+						},1100);
+					}
 					logExecucao("Reforço ao território de " + this.origem.nome + ", agora com " + this.origem.vida + " vidas.",this.origem.controlador);
 				} break;
 				case tiposAcoes.ATAQUE: {
@@ -220,7 +225,13 @@ class Acao {
 							logExecucao("Ataque do território de " + this.origem.nome + " ao território de " + this.destino.nome + ", impedido pelo muro, que foi destruído.",this.origem.controlador);
 						} else {
 							this.destino.vida -= 1;
-							this.destino.atualizarSVG();
+							if (this.acelerar) {
+								this.destino.atualizarSVG();
+							} else {
+								setTimeout((e)=>{
+									this.destino.atualizarSVG();
+								},1100);
+							}
 							logExecucao("Ataque " + (this.agua ? "marítimo " : "") + "do território de " + this.origem.nome + " ao território de " + this.destino.nome + " sob controle de " + this.destino.controlador.nome + ".", this.origem.controlador);
 						}
 					}
@@ -289,11 +300,14 @@ class Muro {
 		muros.push(this);
 	}
 	destruirMuro() {
-		this.svg.style.display = "none";
+		this.svg.style.animation = "animMuroDestroi 2s forwards";
 		const index = muros.indexOf(this);
 		if (index > -1) {
 			muros.splice(index, 1);
 		}
+		setTimeout((e)=>{
+			this.svg.style.display = "none";
+		},tempoTurnos);
 	}
 }
 var jogadores = [];
@@ -724,10 +738,10 @@ function definirGameState(argGameState,argVoltar = false) {
 			});
 		} break;
 		case gameStates.AGUARDAR: {
-			if (estadoSelecionado!=null) {
-				estadoSelecionado.svg.classList.remove("selecao");
-				estadoSelecionado = null;
-			}
+			divBotoesAcoes.classList.remove("cancelar");
+			estados.forEach(estado => {
+				estado.svg.classList.remove("atacar", "murar", "selecao");
+			});
 			spanStatus.innerHTML = "Turno em andamento";
 			let botoes = divBotoesAcoes.getElementsByTagName("button");
 			for (let botao of botoes) {

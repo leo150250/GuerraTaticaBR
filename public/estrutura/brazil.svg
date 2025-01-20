@@ -228,6 +228,29 @@
       stroke-opacity: 1;
    }
 }
+@keyframes animMuroDestroi {
+   50% {
+      stroke: #FFF;
+      stroke-width: 10000px;
+   }
+   55% {
+      stroke: #000;
+   }
+   60% {
+      stroke: #FFF;
+   }
+   65% {
+      stroke: #000;
+   }
+   70% {
+      stroke: #FFF;
+      opacity: 1;
+   }
+   100% {
+      stroke: #FFF;
+      opacity: 0;
+   }
+}
 @keyframes animAtaque {
 	0% { fill: #F00; }
    10% { fill: unset; }
