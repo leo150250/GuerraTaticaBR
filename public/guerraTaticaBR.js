@@ -246,14 +246,14 @@ class Acao {
 					}
 					if (this.destino.vida == 0) {
 						this.destino.vida = 1;
-						this.destino.atualizarControlador(this.origem.controlador);
-						logExecucao("O território de " + this.destino.nome + " foi conquistado por " + this.origem.controlador.nome + ".",this.origem.controlador);
 						if (this.origem.controlador == jogador) {
 							numTerritoriosConquistadosJogador++;
 						}
 						if (this.destino.controlador == jogador) {
 							numTerritoriosPerdidosJogador++;
 						}
+						this.destino.atualizarControlador(this.origem.controlador);
+						logExecucao("O território de " + this.destino.nome + " foi conquistado por " + this.origem.controlador.nome + ".",this.origem.controlador);
 						acoes.filter(acao => acao.origem === this.destino).forEach(acao => acao.invalidar());
 						//verificarJogadores();
 					}
@@ -412,7 +412,7 @@ function focarEstado(argEstado) {
 		zoomMapa(novoZoom);
 		let posX = (estadoBBoxN.x * novoZoom) + ((estadoBBoxN.width * novoZoom) / 2) - (divMapa.clientWidth / 2);
 		let posY = (estadoBBoxN.y * novoZoom) + ((estadoBBoxN.height * novoZoom) / 2) - (divMapa.clientHeight / 2);;
-		console.log(posX);
+		//console.log(posX);
 		moverMapa(-posX, -posY, false);
 	}
 }
