@@ -18,6 +18,8 @@ const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
 const divOverlayMapa = document.getElementById("overlayMapa");
 const divOverlayRanking = document.getElementById("overlayRanking");
 const divOverlayAviso = document.getElementById("overlayAviso");
+const divTitulo = document.getElementById("titulo");
+const pLoader = document.getElementById("loader");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -495,6 +497,7 @@ function obterJogador(argSigla) {
 }
 function definirJogador(argJogador=null) {
 	jogador = obterJogador(argJogador);
+	divTitulo.style.display = "none";
 	if (jogador!=null) {
 		jogador.cpu = false;
 		jogador.usuario = "AAAAA";
@@ -1118,14 +1121,15 @@ async function inicializar() {
 	atualizarOverlayRanking();
 	divOverlayAviso.style.display = "none";
 	zoomMapa(0);
-	dialogEscolhaJogador.showModal();
+	pLoader.innerHTML = "";
+	dialogEscolhaJogador.show();
 	//rodarTurno();
 	//exibirOverlayJogadorPerdeu();
 }
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{
 	if (svgMapaObject.contentDocument.readyState === 'complete' && !inicializado) {
-		inicializar();
+		setTimeout(inicializar,1000);
 		clearTimeout(carregarConteudo);
 	} else {
 		console.log("Aguardando...");
