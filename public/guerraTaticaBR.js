@@ -15,6 +15,8 @@ const pturno = document.getElementById("turno");
 const botaoRodarTurno = document.getElementById("botaoRodarTurno");
 const divListaTerritoriosJogadores = document.getElementById("listaTerritoriosJogadores");
 const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
+const dialogMultijogador = document.getElementById("dialogMultijogador");
+const dialogPrincipal = document.getElementById("dialogPrincipal");
 const divOverlayMapa = document.getElementById("overlayMapa");
 const divOverlayRanking = document.getElementById("overlayRanking");
 const divOverlayAviso = document.getElementById("overlayAviso");
@@ -1105,12 +1107,28 @@ function exibirSumarioPartida() {
 
 
 
+//#region Multiplayer
+
+//#endregion
+
+
+
+
+
 //#region Inicialização
 async function inicializar() {
+	pLoader.innerHTML = "";
+	dialogPrincipal.showModal();
+	//rodarTurno();
+	//exibirOverlayJogadorPerdeu();
+}
+function iniciarUmJogador() {
+	dialogPrincipal.close();
+	dialogEscolhaJogador.showModal();
 	console.log("Inicializando...");
 	inicializado = true;
-	svgMapa = await svgMapaObject.contentDocument.documentElement;
-	await iniciarEstados();
+	svgMapa = svgMapaObject.contentDocument.documentElement;
+	iniciarEstados();
 	definirGameState(gameStates.STANDBY);
 	divBarraInferior.innerHTML="";
 	logExecucao("Bem-vindo ao GuerraTaticaBR!");
@@ -1121,10 +1139,11 @@ async function inicializar() {
 	atualizarOverlayRanking();
 	divOverlayAviso.style.display = "none";
 	zoomMapa(0);
-	pLoader.innerHTML = "";
-	dialogEscolhaJogador.show();
-	//rodarTurno();
-	//exibirOverlayJogadorPerdeu();
+}
+function iniciarMultijogador() {
+	dialogPrincipal.close();
+	dialogMultijogador.showModal();
+
 }
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{

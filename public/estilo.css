@@ -63,6 +63,16 @@ dialog::backdrop {
 	-webkit-backdrop-filter: blur(2) contrast(0.25);
 	backdrop-filter: blur(2px) contrast(0.25);
 }
+.menuVertical {
+	display: flex;
+	flex-direction: column;
+	width: 20em;
+	max-width: 90%;
+	margin: 0 auto;
+}
+.menuVertical button {
+	margin: 0.25rem;
+}
 #titulo {
 	background-color: #000;
 	color: #FFF;

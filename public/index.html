@@ -10,8 +10,6 @@
 	<div id="titulo">
 		<h1>Guerra Tática BR</h1>
 		<img src="estrutura/GuerraTaticaBR.svg" title="Guerra Tática BR">
-		<p>Desenvolvido por <a href="https://leandrogabriel.net/">LeandroGabriel.net</a> - 2025</p>
-		<p>Apoie este projeto no <a href="https://github.com/leo150250/GuerraTaticaBR">GitHub</a>!</p>
 		<p id="loader">Carregando...</p>
 	</div>
 	<div id="wrapper">
@@ -52,6 +50,34 @@
 		<p>Escolha seu território</p>
 		<div id="listaTerritoriosJogadores"></div>
 	</dialog>
+	<dialog id="dialogPrincipal">
+		<p>Menu Principal</p>
+		<div class="menuVertical">
+			<button onclick="iniciarUmJogador()">Um jogador</button>
+			<button onclick="iniciarMultijogador()">Multijogador</button>
+			<button onclick="window.location.href='https://github.com/leo150250/GuerraTaticaBR'">Projeto no GitHub</button>
+			<button onclick="window.location.href='https://leandrogabriel.net/'">LeandroGabriel.net</button>
+		</div>
+	</dialog>
+	<dialog id="dialogMultijogador">
+		<p>Menu Multijogador</p>
+		<div id="listaPartidasPublicas"></div>
+			<p>Partidas Públicas</p>
+			<ul id="partidasPublicas">
+				<!-- Lista de partidas será preenchida dinamicamente -->
+			</ul>
+		</div>
+		<div id="detalhesPartida">
+			<p>Detalhes da Partida</p>
+			<div id="infoPartidaSelecionada">
+				<!-- Detalhes da partida selecionada serão exibidos aqui -->
+			</div>
+		</div>
+		<div class="menuVertical">
+			<button onclick="criarSala()">Criar sala</button>
+			<button onclick="entrarSala()">Entrar em sala</button>
+			<button onclick="voltarMenuPrincipal()">Voltar</button>
+		</div>
 	<script src="guerraTaticaBR.js"></script>
 </body>
 </html>
