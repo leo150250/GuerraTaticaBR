@@ -61,17 +61,19 @@
 	</dialog>
 	<dialog id="dialogMultijogador">
 		<p>Menu Multijogador</p>
-		<div id="listaPartidasPublicas"></div>
-			<p>Partidas Públicas</p>
-			<ul id="partidasPublicas">
-				<!-- Lista de partidas será preenchida dinamicamente -->
-			</ul>
-		</div>
-		<div id="detalhesPartida">
-			<p>Detalhes da Partida</p>
-			<div id="infoPartidaSelecionada">
-				<!-- Detalhes da partida selecionada serão exibidos aqui -->
-			</div>
+		<div id="listagemPartidas">
+			<fieldset>
+				<legend>Partidas Públicas</legend>
+				<ul id="listaPartidasPublicas">
+					<!-- Lista de partidas será preenchida dinamicamente -->
+				</ul>
+			</fieldset>
+			<fieldset>
+				<legend>Detalhes da Partida</legend>
+				<div id="infoPartidaSelecionada">
+					<!-- Detalhes da partida selecionada serão exibidos aqui -->
+				</div>
+			</fieldset>
 		</div>
 		<div class="menuVertical">
 			<button onclick="criarSala()">Criar sala</button>
