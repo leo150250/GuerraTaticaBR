@@ -2,3 +2,4 @@
 /server/sistema/.dados/*_log.txt
 /server/sistema/.dados/*_override.json
 /server/sistema/.dados/*_estrutura.json
+/server/vendor

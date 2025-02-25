@@ -1,4 +1,12 @@
 <?php
+require __DIR__ . '/vendor/autoload.php';
+
+use Ratchet\MessageComponentInterface;
+use Ratchet\ConnectionInterface;
+use Ratchet\Server\IoServer;
+use Ratchet\Http\HttpServer;
+use Ratchet\WebSocket\WsServer;
+
 echo "<pre>";
 $pathServidor = $_SERVER['DOCUMENT_ROOT'] . "/gtbrserver/";
 // Verifica se a variável GET "novo" está definida
@@ -19,7 +27,7 @@ if (isset($_GET['novo'])) {
     }
 
     // Cria um arquivo JSON limpo para o override
-    file_put_contents($overrideFile, json_encode(new stdClass(), JSON_PRETTY_PRINT));
+    file_put_contents($overrideFile, json_encode([], JSON_PRETTY_PRINT));
 
     // Registra a criação da sala no log
     registrarNoLog("Sala criada: {$salaNome}");
@@ -49,30 +57,78 @@ if (isset($_GET['novo'])) {
     }
     register_shutdown_function('encerraSala');
 
-	// Ajusta o timeout de execução de scripts para rodar infinitamente
-	set_time_limit(600);
+    // Ajusta o timeout de execução de scripts para rodar infinitamente
+    set_time_limit(10);
+
+    // Configura o servidor WebSocket
+    class Sala implements MessageComponentInterface {
+        public function onOpen(ConnectionInterface $conn) {
+            registrarNoLog("Nova conexão: ({$conn->resourceId})");
+        }
+
+        public function onMessage(ConnectionInterface $from, $msg) {
+            registrarNoLog("Comando recebido via WebSocket: " . $msg);
+
+            // Verifica se o comando é "stop"
+            if ($msg === 'stop') {
+                registrarNoLog("Encerrando a sala...");
+                global $emExecucao;
+                $emExecucao = false;
+                global $server;
+                $server->loop->stop();
+                $from->close();
+            } else {
+                $from->send("Comando recebido: " . $msg);
+            }
+        }
+
+        public function onClose(ConnectionInterface $conn) {
+            registrarNoLog("Conexão ({$conn->resourceId}) fechada");
+        }
+
+        public function onError(ConnectionInterface $conn, \Exception $e) {
+            registrarNoLog("Erro: {$e->getMessage()}");
+            $conn->close();
+        }
+    }
+
+    $server = IoServer::factory(
+        new HttpServer(
+            new WsServer(
+                new Sala()
+            )
+        ),
+        12346
+    );
+
+    registrarNoLog("Servidor WebSocket aberto em ws://127.0.0.1:12346");
 
     $emExecucao = true;
+    $server->run();
+
+    // Verifica o arquivo override para comandos
     while ($emExecucao) {
         if (file_exists($overrideFile)) {
-            $overrideData = json_decode(file_get_contents($overrideFile), true);
-            if (is_array($overrideData)) {
-                foreach ($overrideData as $comando) {
-                    registrarNoLog("Comando recebido: " . $comando);
-                    // Verifica se o comando é "stop"
-                    switch ($comando) {
-                        case 'stop':
-                            registrarNoLog("Encerrando a sala...");
-                            $emExecucao = false;
-                            exit; // Encerra o loop e o script
-                    }
+            $overrideContent = json_decode(file_get_contents($overrideFile), true);
+            if (!empty($overrideContent)) {
+                $comando = array_shift($overrideContent);
+                registrarNoLog("Comando recebido via override: " . $comando);
+
+                // Verifica se o comando é "stop"
+                if ($comando === 'stop') {
+                    registrarNoLog("Encerrando a sala...");
+                    $emExecucao = false;
+                    $server->loop->stop();
+                    break;
                 }
+
+                // Atualiza o arquivo override após processar o comando
+                file_put_contents($overrideFile, json_encode($overrideContent, JSON_PRETTY_PRINT));
             }
-            // Limpa o arquivo override
-            file_put_contents($overrideFile, json_encode(new stdClass(), JSON_PRETTY_PRINT));
         }
-        registrarNoLog("Ping");
-        sleep(10);
+        sleep(1);
     }
+
+    registrarNoLog("Servidor WebSocket fechado");
 }
 ?>

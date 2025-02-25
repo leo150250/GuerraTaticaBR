@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Teste Socket</title>
+	<script>
+		let socket;
+
+		function connectSocket() {
+			socket = new WebSocket('ws://localhost:12346');
+			console.log({socket});
+
+			socket.onopen = function() {
+				document.getElementById('response').innerText = 'Conectado ao servidor.';
+			};
+
+			socket.onmessage = function(event) {
+				document.getElementById('response').innerText = 'Resposta: ' + event.data;
+			};
+
+			socket.onerror = function(error) {
+				document.getElementById('response').innerText = 'Erro: ' + error.message;
+			};
+
+			socket.onclose = function() {
+				document.getElementById('response').innerText = 'Conexão fechada.';
+			};
+		}
+
+		function sendCommand() {
+			const command = document.getElementById('command').value;
+			if (socket && socket.readyState === WebSocket.OPEN) {
+				socket.send(command);
+			} else {
+				document.getElementById('response').innerText = 'Erro: Conexão não está aberta.';
+			}
+		}
+	</script>
+</head>
+<body>
+	<h1>Teste de Comandos via Socket</h1>
+	<button onclick="connectSocket()">Conectar ao Servidor</button>
+	<br><br>
+	<input type="text" id="command" placeholder="Digite o comando">
+	<button onclick="sendCommand()">Enviar Comando</button>
+	<p id="response"></p>
+</body>
+</html>
