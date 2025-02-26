@@ -8,7 +8,10 @@
 		let socket;
 
 		function connectSocket() {
-			socket = new WebSocket('ws://localhost:12346');
+			const address = document.getElementById('address').value;
+			const port = document.getElementById('port').value;
+			const url = `ws://${address}:${port}`;
+			socket = new WebSocket(url);
 			console.log({socket});
 
 			socket.onopen = function() {
@@ -40,6 +43,8 @@
 </head>
 <body>
 	<h1>Teste de Comandos via Socket</h1>
+	<input type="text" id="address" placeholder="Endereço do servidor" value="localhost">
+	<input type="text" id="port" placeholder="Porta do servidor" value="12346">
 	<button onclick="connectSocket()">Conectar ao Servidor</button>
 	<br><br>
 	<input type="text" id="command" placeholder="Digite o comando">

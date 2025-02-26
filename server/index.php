@@ -1,11 +1,15 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
+//require __DIR__ . '/vendor/autoload.php';
+
+echo "Rodei!";
 
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
 use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
+
+echo "Carreguei!";
 
 echo "<pre>";
 $pathServidor = $_SERVER['DOCUMENT_ROOT'] . "/gtbrserver/";
