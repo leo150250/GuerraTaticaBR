@@ -56,14 +56,14 @@ class Estado {
     public function toJson() {
         return json_encode([
             'id' => $this->id,
-            'nome' => $this->nome,
+            //'nome' => $this->nome,
             'vida' => $this->vida,
-            'corMatiz' => $this->corMatiz,
-            'corSaturacao' => $this->corSaturacao,
-            'cor' => $this->cor,
-            'acessoAgua' => $this->acessoAgua,
+            //'corMatiz' => $this->corMatiz,
+            //'corSaturacao' => $this->corSaturacao,
+            //'cor' => $this->cor,
+            //'acessoAgua' => $this->acessoAgua,
             'controlador' => $this->controlador->id,
-            'vizinhos' => $this->vizinhos
+            //'vizinhos' => $this->vizinhos
         ]);
     }
 }
@@ -123,6 +123,20 @@ class Jogador {
     }
 }
 
+enum TipoAcao: string {
+    case ATAQUE = 'ATAQUE';
+    case DEFESA = 'DEFESA';
+    case REFORCO = 'REFORCO';
+
+    public function toString(): string {
+        return match($this) {
+            self::ATAQUE => 'ATAQUE',
+            self::DEFESA => 'DEFESA',
+            self::REFORCO => 'REFORCO',
+        };
+    }
+}
+
 class Acao {
     public $origem;
     public $tipo;
@@ -131,7 +145,7 @@ class Acao {
     public $controlador;
     public $excluir;
 
-    public function __construct($origem, $tipo, $destino = null, $agua = false) {
+    public function __construct($origem, TipoAcao $tipo, $destino = null, $agua = false) {
         $this->origem = $origem;
         $this->tipo = $tipo;
         $this->destino = $destino;
@@ -142,7 +156,44 @@ class Acao {
 
     public function executar() {
         if (!$this->excluir) {
-            // Implementar lógica de execução da ação
+            switch ($this->tipo) {
+                case TipoAcao::REFORCO:
+                    $this->origem->vida += 1;
+                    registrarNoLog("Reforço ao território de " . $this->origem->nome . ", agora com " . $this->origem->vida . " vidas.");
+                    break;
+                case TipoAcao::ATAQUE:
+                    if ($this->destino->vida > 0) {
+                        $muroExistente = array_filter($GLOBALS['muros'], function($muro) {
+                            return ($muro->estado1 === $this->origem && $muro->estado2 === $this->destino) || 
+                                   ($muro->estado1 === $this->destino && $muro->estado2 === $this->origem);
+                        });
+                        if ($muroExistente) {
+                            $muroExistente[0]->destruirMuro();
+                            registrarNoLog("Ataque do território de " . $this->origem->nome . " ao território de " . $this->destino->nome . ", impedido pelo muro, que foi destruído.");
+                        } else {
+                            $this->destino->vida -= 1;
+                            registrarNoLog("Ataque " . ($this->agua ? "marítimo " : "") . "do território de " . $this->origem->nome . " ao território de " . $this->destino->nome . " sob controle de " . $this->destino->controlador->nome . ".");
+                        }
+                    }
+                    if ($this->destino->vida == 0) {
+                        $this->destino->vida = 1;
+                        $this->destino->controlador = $this->origem->controlador;
+                        registrarNoLog("O território de " . $this->destino->nome . " foi conquistado por " . $this->origem->controlador->nome . ".");
+                        $GLOBALS['acoes'] = array_filter($GLOBALS['acoes'], function($acao) {
+                            return $acao->origem !== $this->destino;
+                        });
+                    }
+                    break;
+                case TipoAcao::DEFESA:
+                    if (!array_filter($GLOBALS['muros'], function($muro) {
+                        return ($muro->estado1 === $this->origem && $muro->estado2 === $this->destino) || 
+                               ($muro->estado1 === $this->destino && $muro->estado2 === $this->origem);
+                    })) {
+                        $GLOBALS['muros'][] = new Muro($this->origem, $this->destino);
+                        registrarNoLog("O território de " . $this->origem->nome . " criou um muro na fronteira com " . $this->destino->nome);
+                    }
+                    break;
+            }
             $this->excluir = true;
             return true;
         } else {
@@ -155,8 +206,29 @@ class Acao {
     }
 }
 
+class Muro {
+    public $estado1;
+    public $estado2;
+
+    public function __construct($estado1, $estado2) {
+        $this->estado1 = $estado1;
+        $this->estado2 = $estado2;
+    }
+
+    public function destruirMuro() {
+        global $muros;
+        $muros = array_filter($muros, function($muro) {
+            return !($muro->estado1 === $this->estado1 && $muro->estado2 === $this->estado2) &&
+                   !($muro->estado1 === $this->estado2 && $muro->estado2 === $this->estado1);
+        });
+        registrarNoLog("Muro entre {$this->estado1->nome} e {$this->estado2->nome} foi destruído.");
+    }
+}
+
+$muros = [];
 $estados = [];
 $jogadores = [];
+$numJogadoresProntos = 0;
 $acoes = [];
 $dataTurno = new DateTime();
 $numTurnos = 0;
@@ -177,9 +249,6 @@ $salas = json_decode(file_get_contents($salasFile), true);
 $salas[] = ['nome' => $salaNome, 'pid' => $pid, 'data_abertura' => $dataAbertura];
 file_put_contents($salasFile, json_encode($salas, JSON_PRETTY_PRINT));
 registrarNoLog("Sala {$salaNome} criada com PID {$pid}");
-
-// Registra a função de encerramento
-register_shutdown_function('encerraSala');
 
 function inicializarEstadosEJogadores() {
     global $estados, $jogadores, $dataTurno, $numTurnos, $salaNome, $salasFile, $logFile;
@@ -249,6 +318,8 @@ function encerraSala() {
 
     registrarNoLog("Sala {$salaNome} encerrada");
 }
+// Registra a função de encerramento
+register_shutdown_function('encerraSala');
 
 function avancarDataRodada() {
     global $dataTurno, $numTurnos;
@@ -258,12 +329,23 @@ function avancarDataRodada() {
 }
 
 function obterStatusPartida() {
-    global $dataTurno, $numTurnos, $estados;
+    global $dataTurno, $numTurnos, $jogadores;
     $hash = obterHashEstados();
+    $jogadoresData = [];
+    foreach ($jogadores as $jogador) {
+        if ($jogador->usuario!==null) {
+            $jogadoresData[] = [
+                'id' => $jogador->id,
+                'jogador' => $jogador->usuario->resourceId,
+                'imagem' => $jogador->imagem,
+            ];
+        }
+    }
     $status = [
-        'data' => $dataTurno->format('F Y'),
+        'data' => $dataTurno->format('Y-m'),
         'numTurnos' => $numTurnos,
-        'hash' => $hash
+        'hash' => $hash,
+        'jogadores' => $jogadoresData
     ];
     return json_encode($status);
 }
@@ -271,28 +353,49 @@ function obterStatusPartida() {
 function atribuirConexaoAJogador($conn, $jogadorId) {
     global $jogadores;
 
+    // Desfaz a conexão anterior, se houver
+    foreach ($jogadores as $jogador) {
+        if ($jogador->usuario === $conn) {
+            $jogador->usuario = null;
+            $jogador->cpu = true;
+            break;
+        }
+    }
+
     foreach ($jogadores as $jogador) {
         if ($jogador->id === $jogadorId) {
             $jogador->usuario = $conn;
+            $jogador->cpu = false;
+            registrarNoLog("Conexão ({$conn->resourceId}) vinculada ao jogador {$jogador->id}");
             return $jogador;
         }
     }
     return null;
 }
 
-function criarAcao($origem, $tipo, $destino = null, $agua = false) {
+function obterJogadorDeConexao($conn) {
+    global $jogadores;
+
+    foreach ($jogadores as $jogador) {
+        if ($jogador->usuario === $conn) {
+            return $jogador;
+        }
+    }
+    return null;
+}
+
+function criarAcao($origem, TipoAcao $tipo, $destino = null, $agua = false) {
     global $acoes;
     $acao = new Acao($origem, $tipo, $destino, $agua);
     $acoes[] = $acao;
-    registrarNoLog("Ação criada: {$tipo} de {$origem->id}" . ($destino ? " para {$destino->id}" : ""));
+    registrarNoLog("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : ""));
 }
 
 function executarAcoes() {
     global $acoes;
     foreach ($acoes as $acao) {
-        if ($acao->executar()) {
-            registrarNoLog("Ação executada: {$acao->tipo} de {$acao->origem->id}" . ($acao->destino ? " para {$acao->destino->id}" : ""));
-        }
+        registrarNoLog("Executando ação: {$acao->tipo->toString()} de {$acao->origem->id}" . ($acao->destino ? " para {$acao->destino->id}" : ""));
+        $acao->executar();
     }
     $acoes = array_filter($acoes, function($acao) {
         return !$acao->excluir;
@@ -303,8 +406,83 @@ function executarAcoes() {
 inicializarEstadosEJogadores();
 
 // Exemplo de criação e execução de ações
-//criarAcao($estados[0], 'ATAQUE', $estados[1]);
-//executarAcoes();
+// criarAcao($estados[0], TipoAcao::ATAQUE, $estados[1]);
+// executarAcoes();
+
+enum EstadoPartida: string {
+    case LOBBY = 'LOBBY';
+    case PLANEJAMENTO = 'PLANEJAMENTO';
+    case EXECUCAO = 'EXECUCAO';
+    case AGUARDANDO = 'AGUARDANDO';
+}
+
+$estadoPartida = EstadoPartida::LOBBY;
+$tempoPlanejamento = 30; // segundos
+$inicioPlanejamento = null;
+
+function iniciarPlanejamento() {
+    global $estadoPartida, $inicioPlanejamento;
+    $estadoPartida = EstadoPartida::PLANEJAMENTO;
+    $inicioPlanejamento = time();
+    registrarNoLog("Rodada de planejamento iniciada");
+}
+
+function obterTempoRestantePlanejamento() {
+    global $inicioPlanejamento, $tempoPlanejamento;
+    if ($inicioPlanejamento === null) {
+        return $tempoPlanejamento;
+    }
+    $tempoPassado = time() - $inicioPlanejamento;
+    return max(0, $tempoPlanejamento - $tempoPassado);
+}
+
+function iniciarExecucao() {
+    global $acoes, $estadoPartida, $numJogadoresProntos;
+    $estadoPartida = EstadoPartida::EXECUCAO;
+    registrarNoLog("Rodada de execução iniciada");
+    shuffle($acoes);
+    executarAcoes();
+    $estadoPartida = EstadoPartida::AGUARDANDO;
+    registrarNoLog("Estado da partida definido para AGUARDANDO");
+    $numJogadoresProntos = 0;
+    global $clients;
+    $jsonAcoes = json_encode(array_map(function($acao) {
+        return [
+            'origem' => $acao->origem->id,
+            'tipo' => $acao->tipo->toString(),
+            'destino' => $acao->destino ? $acao->destino->id : null,
+            'agua' => $acao->agua
+        ];
+    }, $acoes));
+    foreach ($clients as $client) {
+        if ($client instanceof Connection) {
+            $client->send(encodeMessage($jsonAcoes));
+        }
+    }
+}
+
+function verificarEstadoPartida() {
+    global $estadoPartida, $numJogadoresProntos, $jogadores;
+    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && obterTempoRestantePlanejamento() <= 0) {
+        iniciarExecucao();
+    }
+    if ($estadoPartida === EstadoPartida::AGUARDANDO) {
+        $humanPlayers = array_filter($jogadores, function($jogador) {
+            return !$jogador->cpu;
+        });
+        $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+        if ($remainingPlayers === 0) {
+            avancarDataRodada();
+            global $clients;
+            foreach ($clients as $client) {
+                if ($client instanceof Connection) {
+                    $client->send(encodeMessage("start"));
+                }
+            }
+            iniciarPlanejamento();
+        }
+    }
+}
 
 class Chat {
     protected $clients;
@@ -316,13 +494,32 @@ class Chat {
     public function onOpen($conn) {
         $this->clients[(int)$conn->resourceId] = $conn;
         registrarNoLog("Nova conexão: ({$conn->resourceId})");
+        $conn->send(encodeMessage(json_encode([
+            'tipo' => 'resourceId',
+            'conteudo' => $conn->resourceId
+        ])));
+        global $jogadores, $estadoPartida;
+        if ($estadoPartida === EstadoPartida::LOBBY) {
+            $jogadoresSemConexao = array_filter($jogadores, function($jogador) {
+                return $jogador->usuario === null;
+            });
+            if (!empty($jogadoresSemConexao)) {
+                $jogadorAleatorio = $jogadoresSemConexao[array_rand($jogadoresSemConexao)];
+                atribuirConexaoAJogador($conn, $jogadorAleatorio->id);
+            }
+            $conn->send(encodeMessage(json_encode([
+                'tipo' => 'status',
+                'conteudo' => json_decode(obterStatusPartida())])));
+        }
     }
 
     public function onMessage($from, $msg) {
         if (strpos($msg, '\\') === 0) {
             // Interpretar como comando ao servidor
-            $command = substr($msg, 1);
-            registrarNoLog(sprintf("Comando recebido de %d: $command", $from->resourceId));
+            $parts = explode(' ', substr($msg, 1));
+            $command = $parts[0];
+            $args = array_slice($parts, 1);
+            registrarNoLog(sprintf("Comando recebido de %d: $command com argumentos: %s", $from->resourceId, implode(' ', $args)));
             switch ($command) {
                 case 'stop':
                     registrarNoLog("Servidor parando...");
@@ -348,6 +545,62 @@ class Chat {
                 case 'ping':
                     $from->send(encodeMessage("pong"));
                     break;
+                case 'linkPlayer':
+                    $jogadorId = $args[0];
+                    $jogador = atribuirConexaoAJogador($from, $jogadorId);
+                    if ($jogador) {
+                        $from->send(encodeMessage("Jogador {$jogador->id} vinculado com sucesso"));
+                    } else {
+                        $from->send(encodeMessage("Jogador não encontrado"));
+                    }
+                    break;
+                case 'action':
+                    global $estados;
+                    $origemId = $args[0];
+                    switch($args[1]) {
+                        case 'ATQ':
+                            $tipo = TipoAcao::ATAQUE;
+                            break;
+                        case 'DEF':
+                            $tipo = TipoAcao::DEFESA;
+                            break;
+                        case 'REF':
+                            $tipo = TipoAcao::REFORCO;
+                            break;
+                        default:
+                            $from->send(encodeMessage("Tipo de ação desconhecido"));
+                            return;
+                    }
+                    $destinoId = $args[2] ?? null;
+                    $agua = $args[3] ?? false;
+                    $origem = null;
+                    $destino = null;
+                    foreach ($estados as $estado) {
+                        if ($estado->id === $origemId) {
+                            $origem = $estado;
+                        }
+                        if ($estado->id === $destinoId) {
+                            $destino = $estado;
+                        }
+                    }
+                    if ($origem) {
+                        criarAcao($origem, $tipo, $destino, $agua);
+                        $from->send(encodeMessage("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : "")));
+                    } else {
+                        $from->send(encodeMessage("Estado não encontrado"));
+                    }
+                    break;
+                case 'ready':
+                    global $numJogadoresProntos;
+                    global $jogadores;
+                    $numJogadoresProntos++;
+                    registrarNoLog("Jogador " . obterJogadorDeConexao($from)->id . " pronto");
+                    $humanPlayers = array_filter($jogadores, function($jogador) {
+                        return !$jogador->cpu;
+                    });
+                    $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+                    registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
+                    break;
                 default:
                     registrarNoLog("Comando desconhecido: $command");
                     break;
@@ -366,6 +619,12 @@ class Chat {
     }
 
     public function onClose($conn) {
+        $jogador = obterJogadorDeConexao($conn);
+        if ($jogador) {
+            $jogador->usuario = null;
+            $jogador->cpu = true;
+            registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogador->id}");
+        }
         unset($this->clients[(int)$conn->resourceId]);
         registrarNoLog("Conexão ({$conn->resourceId}) fechada");
     }
@@ -512,6 +771,16 @@ while (true) {
             }
         }
     }
+
+    verificarEstadoPartida();
+    $tempoRestante = obterTempoRestantePlanejamento();
+    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && $tempoRestante <= 5 && $tempoRestante > 0) {
+        registrarNoLog("Tempo restante para planejamento: {$tempoRestante} segundos");
+    }
+    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && $tempoRestante <= 0) {
+        iniciarExecucao();
+    }
+    sleep(1);
 }
 
 fclose($server);

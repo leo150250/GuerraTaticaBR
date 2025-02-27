@@ -16,12 +16,14 @@ const botaoRodarTurno = document.getElementById("botaoRodarTurno");
 const divListaTerritoriosJogadores = document.getElementById("listaTerritoriosJogadores");
 const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
 const dialogMultijogador = document.getElementById("dialogMultijogador");
+const dialogLobby = document.getElementById("dialogLobby");
 const dialogPrincipal = document.getElementById("dialogPrincipal");
 const divOverlayMapa = document.getElementById("overlayMapa");
 const divOverlayRanking = document.getElementById("overlayRanking");
 const divOverlayAviso = document.getElementById("overlayAviso");
 const divTitulo = document.getElementById("titulo");
 const pLoader = document.getElementById("loader");
+const selectTerritorioMP = document.getElementById("selectTerritorioMP");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -61,10 +63,14 @@ var iteracoesPausa = 0;
 var numTurnos = 0;
 var autoRodar = false;
 
+var multiplayer = false;
+var mp_servidor = "teste";
+var mp_porta = 12346
+var mp_id = 0;
+
 var gameState = gameStates.STANDBY;
 
 var svgMapa = null;
-
 svgMapaObject.onload = (e)=>{
 	if (!inicializado) {
 		console.log("Mapa pronto");
@@ -517,6 +523,8 @@ function definirJogador(argJogador=null) {
 		atualizarQuantidadeDeAcoes();
 
 		logExecucao("Você está jogando como: " + estadoJogador.nome + " (" + estadoJogador.id + ")");
+		console.log(obterJSONEstados());
+		console.log(obterHashEstados());
 	} else {
 		numAcoesMax = 0;
 	}
@@ -1108,7 +1116,115 @@ function exibirSumarioPartida() {
 
 
 //#region Multiplayer
+function obterJSONEstados() {
+    let estadoData = estados.map(estado => ({
+        id: estado.id,
+        //nome: estado.nome,
+        vida: estado.vida,
+        //corMatiz: estado.corMatiz,
+        //corSaturacao: estado.corSaturacao,
+        //cor: estado.cor,
+        //acessoAgua: estado.acessoAgua,
+        controlador: estado.controlador.id,
+        //vizinhos: estado.vizinhos.map(vizinho => vizinho.id)
+    }));
+    
+    let jsonEstados = JSON.stringify(estadoData, (key, value) => {
+        if (typeof value === 'string') {
+            return value.replace(/[\u00C0-\u017F]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+        }
+        return value;
+    });
+	jsonEstados = jsonEstados.replace(/\\\\/g, '\\');
+    
+    return jsonEstados;
+}
+function obterHashEstados() {
+	return md5(obterJSONEstados());
+}
+function entrarSalaIP(servidor = mp_servidor) {
+	if (servidor == mp_servidor) {
+		mp_servidor = prompt("Informe o endereço do servidor:", mp_servidor);
+	} else {
+		mp_servidor = servidor;
+	}
+	const url = `ws://${mp_servidor}:${mp_porta}`;
+	const socket = new WebSocket(url);
 
+	socket.onopen = function() {
+		exibirLobby();
+	};
+
+	socket.onmessage = function(event) {
+		console.log('SERVIDOR: ' + event.data);
+		let jsonServidor = JSON.parse(event.data);
+		console.log(jsonServidor);
+		switch (jsonServidor.tipo) {
+			case "resourceId": mp_id = parseInt(jsonServidor.conteudo); break;
+			case "status": 
+				const jogadoresLobby = document.getElementById("jogadoresLobby");
+				jogadoresLobby.innerHTML = "";
+				for (let index = 0; index < jsonServidor.conteudo.jogadores.length; index++) {
+					console.log(jsonServidor.conteudo.jogadores[index]);
+					const jogador = jsonServidor.conteudo.jogadores[index];
+					const divJogador = document.createElement("div");
+					divJogador.classList.add("jogadorLobby");
+					
+					const numeroJogador = document.createElement("span");
+					numeroJogador.textContent = index + 1;
+					divJogador.appendChild(numeroJogador);
+					
+					const imgJogador = document.createElement("img");
+					imgJogador.src = "estrutura/" + jogador.imagem;
+					imgJogador.classList.add("bandeira");
+					imgJogador.title = jogador.nome;
+					divJogador.appendChild(imgJogador);
+					
+					jogadoresLobby.appendChild(divJogador);
+
+					if (jogador.jogador === mp_id) {
+						selectTerritorioMP.value = jogador.id;
+						const imagemJogadorMP = document.getElementById("imagemJogadorMP");
+						imagemJogadorMP.src = "estrutura/" + jogador.imagem;
+						imagemJogadorMP.title = jogador.nome;
+					}
+				}
+				break;
+		}
+	};
+
+	socket.onerror = function(error) {
+		alert('Erro: ' + error.message);
+	};
+
+	socket.onclose = function() {
+		window.location.reload();
+	};
+}
+function exibirLobby() {
+	dialogLobby.showModal();
+	
+	selectTerritorioMP.innerHTML = "";
+
+	jogadores.forEach(jogador => {
+		const option = document.createElement("option");
+		option.value = jogador.id;
+		option.textContent = jogador.nome;
+		selectTerritorioMP.appendChild(option);
+	});
+	selectTerritorioMP.addEventListener("change", (event) => {
+		const selectedOption = event.target.value;
+		const jogadorSelecionado = jogadores.find(jogador => jogador.id === selectedOption);
+		if (jogadorSelecionado) {
+			const imagemJogadorMP = document.getElementById("imagemJogadorMP");
+			imagemJogadorMP.src = "estrutura/" + jogadorSelecionado.imagem;
+			imagemJogadorMP.title = jogadorSelecionado.nome;
+		}
+	});
+}
+function sairSala() {
+
+}
 //#endregion
 
 
@@ -1118,7 +1234,10 @@ function exibirSumarioPartida() {
 //#region Inicialização
 async function inicializar() {
 	pLoader.innerHTML = "";
-	dialogPrincipal.showModal();
+	svgMapa = svgMapaObject.contentDocument.documentElement;
+	iniciarEstados();
+	//dialogPrincipal.showModal();
+	entrarSalaIP("localhost");
 	//rodarTurno();
 	//exibirOverlayJogadorPerdeu();
 }
@@ -1127,8 +1246,7 @@ function iniciarUmJogador() {
 	dialogEscolhaJogador.showModal();
 	console.log("Inicializando...");
 	inicializado = true;
-	svgMapa = svgMapaObject.contentDocument.documentElement;
-	iniciarEstados();
+	
 	definirGameState(gameStates.STANDBY);
 	divBarraInferior.innerHTML="";
 	logExecucao("Bem-vindo ao GuerraTaticaBR!");
@@ -1143,7 +1261,6 @@ function iniciarUmJogador() {
 function iniciarMultijogador() {
 	dialogPrincipal.close();
 	dialogMultijogador.showModal();
-
 }
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{

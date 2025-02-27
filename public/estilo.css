@@ -78,6 +78,30 @@ dialog::backdrop {
 .menuVertical button {
 	margin: 0.25rem;
 }
+.flex {
+	display: flex;
+	flex-wrap: wrap;
+}
+.flex * {
+	flex-grow: 2;
+}
+fieldset:has(#chatLobby) {
+	flex-basis: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	& #chatLobby {
+		flex-basis: 100%;
+		height: 5em;
+		background-color: #0008;
+	}
+	& button {
+		flex-shrink: 2;
+		flex-grow: 0;
+	}
+	& input {
+		flex-grow: 2;
+	}
+}
 #titulo {
 	background-color: #000;
 	color: #FFF;

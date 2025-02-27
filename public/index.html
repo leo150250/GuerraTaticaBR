@@ -76,10 +76,41 @@
 			</fieldset>
 		</div>
 		<div class="menuVertical">
-			<button onclick="criarSala()">Criar sala</button>
-			<button onclick="entrarSala()">Entrar em sala</button>
+			<!-- <button onclick="criarSala()">Criar sala</button> -->
+			<button onclick="entrarSala()" disabled>Entrar na sala</button>
+			<button onclick="entrarSalaIP()">IP direto</button>
 			<button onclick="voltarMenuPrincipal()">Voltar</button>
 		</div>
+	</dialog>
+	<dialog id="dialogLobby">
+		<p>Lobby</p>
+		<div class="flex">
+			<fieldset>
+				<legend>Jogadores</legend>
+				<div id="jogadoresLobby">
+				</div>	
+			</fieldset>
+			<fieldset>
+				<legend>Info</legend>
+				<label for="selectTerritorioMP">Seu território:</label>
+				<select id="selectTerritorioMP">
+				</select>
+				<img src="#" class="bandeira" id="imagemJogadorMP">
+			</fieldset>
+			<fieldset>
+				<legend>Chat</legend>
+				<div id="chatLobby">
+				</div>
+				<input type="text" id="mensagemChatLobby" placeholder="Digite sua mensagem">
+				<button onclick="enviarMensagemChat()">Enviar</button>
+			</fieldset>
+		</div>
+		<div class="menuVertical">
+			<button onclick="mpEstouPronto()">Pronto?</button>
+			<button onclick="sairSala()">Sair da sala</button>
+		</div>
+	</dialog>
+	<script src="md5.min.js"></script>
 	<script src="guerraTaticaBR.js"></script>
 </body>
 </html>
