@@ -67,6 +67,7 @@ var multiplayer = false;
 var mp_servidor = "teste";
 var mp_porta = 12346
 var mp_id = 0;
+var socket = null;
 
 var gameState = gameStates.STANDBY;
 
@@ -1149,7 +1150,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 		mp_servidor = servidor;
 	}
 	const url = `ws://${mp_servidor}:${mp_porta}`;
-	const socket = new WebSocket(url);
+	socket = new WebSocket(url);
 
 	socket.onopen = function() {
 		exibirLobby();
@@ -1164,21 +1165,23 @@ function entrarSalaIP(servidor = mp_servidor) {
 			case "status": 
 				const jogadoresLobby = document.getElementById("jogadoresLobby");
 				jogadoresLobby.innerHTML = "";
+				atualizarJogadoresServidor(jsonServidor.conteudo.jogadores);
 				for (let index = 0; index < jsonServidor.conteudo.jogadores.length; index++) {
+
 					console.log(jsonServidor.conteudo.jogadores[index]);
 					const jogador = jsonServidor.conteudo.jogadores[index];
 					const divJogador = document.createElement("div");
 					divJogador.classList.add("jogadorLobby");
 					
-					const numeroJogador = document.createElement("span");
-					numeroJogador.textContent = index + 1;
-					divJogador.appendChild(numeroJogador);
-					
 					const imgJogador = document.createElement("img");
 					imgJogador.src = "estrutura/" + jogador.imagem;
 					imgJogador.classList.add("bandeira");
-					imgJogador.title = jogador.nome;
+					imgJogador.title = jogador.id;
 					divJogador.appendChild(imgJogador);
+
+					const nomeJogador = document.createElement("span");
+					nomeJogador.textContent = jogador.nome;
+					divJogador.appendChild(nomeJogador);
 					
 					jogadoresLobby.appendChild(divJogador);
 
@@ -1189,6 +1192,34 @@ function entrarSalaIP(servidor = mp_servidor) {
 						imagemJogadorMP.title = jogador.nome;
 					}
 				}
+				break;
+			case "msg":
+				const divMensagem = document.createElement("div");
+				divMensagem.classList.add("mensagemChat");
+
+				if (jsonServidor.conteudo.remetente === -1) {
+					const textoMensagem = document.createElement("p");
+					textoMensagem.textContent = jsonServidor.conteudo.msg;
+					divMensagem.appendChild(textoMensagem);
+				} else {
+					const jogadorMsg = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo.remetente);
+
+					const imgJogador = document.createElement("img");
+					imgJogador.src = "estrutura/" + jogadorMsg.imagem;
+					imgJogador.classList.add("bandeira");
+					imgJogador.title = jogadorMsg.id;
+					divMensagem.appendChild(imgJogador);
+
+					const nomeJogador = document.createElement("span");
+					nomeJogador.textContent = jogadorMsg.nome + " diz:";
+					divMensagem.appendChild(nomeJogador);
+
+					const textoMensagem = document.createElement("p");
+					textoMensagem.textContent = jsonServidor.conteudo.msg;
+					divMensagem.appendChild(textoMensagem);
+				}
+
+				document.getElementById("chatLobby").appendChild(divMensagem);
 				break;
 		}
 	};
@@ -1219,11 +1250,35 @@ function exibirLobby() {
 			const imagemJogadorMP = document.getElementById("imagemJogadorMP");
 			imagemJogadorMP.src = "estrutura/" + jogadorSelecionado.imagem;
 			imagemJogadorMP.title = jogadorSelecionado.nome;
+			socket.send("\\linkPlayer "+selectedOption);
 		}
 	});
 }
+function enviarMensagemChat() {
+	const inputMensagem = document.getElementById("mensagemChatLobby");
+	const mensagem = inputMensagem.value.trim();
+	if (mensagem !== "") {
+		socket.send(mensagem);
+		inputMensagem.value = "";
+		inputMensagem.focus();
+	}
+}
+document.getElementById("mensagemChatLobby").addEventListener("keydown", function(event) {
+	if (event.key === "Enter") {
+		enviarMensagemChat();
+	}
+});
 function sairSala() {
 
+}
+function atualizarJogadoresServidor(argJSONJogadores) {
+	argJSONJogadores.forEach(jogadorData => {
+		let jogador = jogadores.find(j => j.id === jogadorData.id);
+		if (jogador) {
+			jogador.nome = jogadorData.nome;
+			jogador.usuario = jogadorData.jogador;
+		}
+	});
 }
 //#endregion
 
@@ -1236,8 +1291,8 @@ async function inicializar() {
 	pLoader.innerHTML = "";
 	svgMapa = svgMapaObject.contentDocument.documentElement;
 	iniciarEstados();
-	//dialogPrincipal.showModal();
-	entrarSalaIP("localhost");
+	dialogPrincipal.showModal();
+	//entrarSalaIP("localhost");
 	//rodarTurno();
 	//exibirOverlayJogadorPerdeu();
 }

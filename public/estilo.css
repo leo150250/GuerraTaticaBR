@@ -91,8 +91,23 @@ fieldset:has(#chatLobby) {
 	flex-wrap: wrap;
 	& #chatLobby {
 		flex-basis: 100%;
-		height: 5em;
+		height: 10em;
 		background-color: #0008;
+		text-align: left;
+		overflow-y: scroll;
+		& .mensagemChat {
+			display: block;
+			border-bottom: 1px solid #8884;
+			& span {
+				font-size: 0.75rem;
+				color: #FF0;
+			}
+			& p {
+				display: inline-block;
+				margin: 0.25rem;
+				font-weight: bold;
+			}
+		}
 	}
 	& button {
 		flex-shrink: 2;
@@ -100,6 +115,23 @@ fieldset:has(#chatLobby) {
 	}
 	& input {
 		flex-grow: 2;
+	}
+}
+#jogadoresLobby {
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	max-height: 10em;
+	flex-wrap: wrap;
+	& .jogadorLobby {
+		border: 1px solid #8884;
+
+		flex-basis: 2.5rem;
+		box-sizing: border-box;
+		flex-grow: 0;
+		&.pronto {
+			background-color: #175a17;
+		}
 	}
 }
 #titulo {

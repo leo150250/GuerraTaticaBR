@@ -296,6 +296,7 @@ function inicializarEstadosEJogadores() {
 
     foreach ($estrutura as $estadoData) {
         $jogador = new Jogador($estadoData);
+        $jogador->nome = gerarNomeAleatorio();
         $jogadores[] = $jogador;
         $estadoData['controlador'] = $jogador;
         $estado = new Estado($estadoData);
@@ -303,6 +304,36 @@ function inicializarEstadosEJogadores() {
     }
 
     registrarNoLog("Estados e jogadores inicializados");
+}
+
+function gerarNomeAleatorio() {
+    $titulos = ["Ten", "Sgt", "Cmd", "Alm", "Cap", "Maj", "Cel", "Gen", "Cb"];
+    $animais = ["Tigre", "Onca", "Macaco", "Cavalo", "Leao", "Elefante", "Girafa", "Zebra", "Hipopotamo", "Rinoceronte", "Canguru", "Panda", "Lobo", "Raposa", "Urso", "Coelho", "Gato", "Cachorro", "Papagaio", "Arara"];
+    $arvores = ["Nogueira", "Palmeira", "Araucária", "Carvalho", "Cedro", "Eucalipto", "Figueira", "Ipê", "Jacarandá", "Jatobá", "Mangueira", "Paineira", "Pau-brasil", "Pinheiro", "Sibipiruna"];
+
+    $tentativas = 0;
+    global $jogadores;
+    do {
+        $titulo = $titulos[array_rand($titulos)];
+        $animal = $animais[array_rand($animais)];
+        $arvore = $arvores[array_rand($arvores)];
+        $nomeCompleto = $titulo . ". " . $animal . " " . $arvore;
+        $nomeExistente = false;
+
+        foreach ($jogadores as $jogador) {
+            if ($jogador->nome === $nomeCompleto) {
+                $nomeExistente = true;
+                break;
+            }
+        }
+
+        $tentativas++;
+    } while ($nomeExistente && $tentativas < 10);
+
+    if ($nomeExistente) {
+        $nomeCompleto = uniqid();
+    }
+    return $nomeCompleto;
 }
 
 function encerraSala() {
@@ -337,6 +368,7 @@ function obterStatusPartida() {
             $jogadoresData[] = [
                 'id' => $jogador->id,
                 'jogador' => $jogador->usuario->resourceId,
+                'nome' => $jogador->nome,
                 'imagem' => $jogador->imagem,
             ];
         }
@@ -507,9 +539,18 @@ class Chat {
                 $jogadorAleatorio = $jogadoresSemConexao[array_rand($jogadoresSemConexao)];
                 atribuirConexaoAJogador($conn, $jogadorAleatorio->id);
             }
-            $conn->send(encodeMessage(json_encode([
+            $status = json_encode([
                 'tipo' => 'status',
-                'conteudo' => json_decode(obterStatusPartida())])));
+                'conteudo' => json_decode(obterStatusPartida())
+            ]);
+            foreach ($this->clients as $client) {
+                $client->send(encodeMessage($status));
+                $client->send(encodeMessage(json_encode([
+                            "tipo"=>"msg",
+                            "conteudo"=>[
+                                "remetente"=>-1,
+                                "msg"=>"{$jogadorAleatorio->nome} entrou na sala"]])));
+            }
         }
     }
 
@@ -612,7 +653,11 @@ class Chat {
                 $from->resourceId, $msg, $numRecv));
             foreach ($this->clients as $client) {
                 if ($from !== $client) {
-                    $client->send(encodeMessage($msg));
+                    $client->send(encodeMessage(json_encode([
+                        "tipo"=>"msg",
+                        "conteudo"=>[
+                            "remetente"=>$from->resourceId,
+                            "msg"=>$msg]])));
                 }
             }
         }
