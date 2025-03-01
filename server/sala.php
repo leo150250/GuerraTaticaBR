@@ -1,4 +1,19 @@
 <?php
+#region Classes e Enums
+enum TipoAcao: string {
+    case ATAQUE = 'ATAQUE';
+    case DEFESA = 'DEFESA';
+    case REFORCO = 'REFORCO';
+
+    public function toString(): string {
+        return match($this) {
+            self::ATAQUE => 'ATAQUE',
+            self::DEFESA => 'DEFESA',
+            self::REFORCO => 'REFORCO',
+        };
+    }
+}
+
 class Estado {
     public $id;
     public $nome;
@@ -67,9 +82,9 @@ class Estado {
         ]);
     }
 }
-
 class Jogador {
     public $id;
+    public $idNome;
     public $nome;
     public $imagem;
     public $usuario;
@@ -81,6 +96,7 @@ class Jogador {
 
     public function __construct($data) {
         $this->id = $data['id'];
+        $this->idNome = $data['nome'];
         $this->nome = $data['nome'];
         $this->imagem = $data['svgId'] . ".svg";
         $this->usuario = isset($data['usuario']) ? $data['usuario'] : null;
@@ -122,21 +138,6 @@ class Jogador {
         return sprintf("#%02x%02x%02x", $r, $g, $b);
     }
 }
-
-enum TipoAcao: string {
-    case ATAQUE = 'ATAQUE';
-    case DEFESA = 'DEFESA';
-    case REFORCO = 'REFORCO';
-
-    public function toString(): string {
-        return match($this) {
-            self::ATAQUE => 'ATAQUE',
-            self::DEFESA => 'DEFESA',
-            self::REFORCO => 'REFORCO',
-        };
-    }
-}
-
 class Acao {
     public $origem;
     public $tipo;
@@ -205,7 +206,6 @@ class Acao {
         $this->excluir = true;
     }
 }
-
 class Muro {
     public $estado1;
     public $estado2;
@@ -224,7 +224,233 @@ class Muro {
         registrarNoLog("Muro entre {$this->estado1->nome} e {$this->estado2->nome} foi destruído.");
     }
 }
+//Conexões e sockets
+class Connection {
+    public $resourceId;
+    public $socket;
 
+    public function __construct($socket) {
+        $this->socket = $socket;
+        $this->resourceId = (int)$socket;
+    }
+
+    public function send($msg) {
+        fwrite($this->socket, $msg);
+    }
+
+    public function close() {
+        fclose($this->socket);
+    }
+}
+class Chat {
+    protected $clients;
+
+    public function __construct() {
+        $this->clients = array();
+    }
+
+    public function onOpen($conn) {
+        $this->clients[(int)$conn->resourceId] = $conn;
+        registrarNoLog("Nova conexão: ({$conn->resourceId})");
+        $conn->send(encodeMessage(json_encode([
+            'tipo' => 'resourceId',
+            'conteudo' => $conn->resourceId
+        ])));
+        global $jogadores, $estadoPartida;
+        if ($estadoPartida === EstadoPartida::LOBBY) {
+            $jogadoresSemConexao = array_filter($jogadores, function($jogador) {
+                return $jogador->usuario === null;
+            });
+            if (!empty($jogadoresSemConexao)) {
+                $jogadorAleatorio = $jogadoresSemConexao[array_rand($jogadoresSemConexao)];
+                atribuirConexaoAJogador($conn, $jogadorAleatorio->id);
+            }
+            $status = json_encode([
+                'tipo' => 'status',
+                'conteudo' => json_decode(obterStatusPartida())
+            ]);
+            foreach ($this->clients as $client) {
+                $client->send(encodeMessage($status));
+                $client->send(encodeMessage(json_encode([
+                            "tipo"=>"msg",
+                            "conteudo"=>[
+                                "remetente"=>-1,
+                                "msg"=>"{$jogadorAleatorio->nome} entrou na sala"]])));
+            }
+        }
+    }
+
+    public function onMessage($from, $msg) {
+        if (strpos($msg, '\\') === 0) {
+            // Interpretar como comando ao servidor
+            $parts = explode(' ', substr($msg, 1));
+            $command = $parts[0];
+            $args = array_slice($parts, 1);
+            registrarNoLog(sprintf("Comando recebido de %d: $command com argumentos: %s", $from->resourceId, implode(' ', $args)));
+            switch ($command) {
+                case 'stop':
+                    registrarNoLog("Servidor parando...");
+                    exit();
+                    break;
+                case 'reset':
+                    registrarNoLog("Reiniciando estados e jogadores...");
+                    inicializarEstadosEJogadores();
+                    break;
+                case 'check':
+                    $status = obterStatusPartida();
+                    $from->send(encodeMessage($status));
+                    registrarNoLog($status);
+                    break;
+                case 'updateEstados':
+                    $jsonEstados = obterJSONEstados();
+                    $from->send(encodeMessage($jsonEstados));
+                    registrarNoLog(encodeMessage($jsonEstados));
+                    break;
+                case 'nextTurn':
+                    avancarDataRodada();
+                    break;
+                case 'ping':
+                    $from->send(encodeMessage("pong"));
+                    break;
+                case 'linkPlayer':
+                    $jogadorId = $args[0];
+                    atribuirConexaoAJogador($from, $jogadorId);
+                    $status = json_encode([
+                        'tipo' => 'status',
+                        'conteudo' => json_decode(obterStatusPartida())
+                    ]);
+                    foreach ($this->clients as $client) {
+                        $client->send(encodeMessage($status));
+                    }
+                    break;
+                case 'renamePlayer':
+                    $novoNome = implode(' ', $args);
+                    obterJogadorDeConexao($from)->nome = $novoNome;
+                    registrarNoLog("Jogador {$from->resourceId} renomeado para {$novoNome}");
+                    $status = json_encode([
+                        'tipo' => 'status',
+                        'conteudo' => json_decode(obterStatusPartida())
+                    ]);
+                    foreach ($this->clients as $client) {
+                        $client->send(encodeMessage($status));
+                    }
+                    break;
+                case 'action':
+                    global $estados;
+                    $origemId = $args[0];
+                    switch($args[1]) {
+                        case 'ATQ':
+                            $tipo = TipoAcao::ATAQUE;
+                            break;
+                        case 'DEF':
+                            $tipo = TipoAcao::DEFESA;
+                            break;
+                        case 'REF':
+                            $tipo = TipoAcao::REFORCO;
+                            break;
+                        default:
+                            $from->send(encodeMessage("Tipo de ação desconhecido"));
+                            return;
+                    }
+                    $destinoId = $args[2] ?? null;
+                    $agua = $args[3] ?? false;
+                    $origem = null;
+                    $destino = null;
+                    foreach ($estados as $estado) {
+                        if ($estado->id === $origemId) {
+                            $origem = $estado;
+                        }
+                        if ($estado->id === $destinoId) {
+                            $destino = $estado;
+                        }
+                    }
+                    if ($origem) {
+                        criarAcao($origem, $tipo, $destino, $agua);
+                        $from->send(encodeMessage("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : "")));
+                    } else {
+                        $from->send(encodeMessage("Estado não encontrado"));
+                    }
+                    break;
+                case 'ready':
+                    global $numJogadoresProntos;
+                    global $jogadores;
+                    $numJogadoresProntos++;
+                    registrarNoLog("Jogador " . obterJogadorDeConexao($from)->id . " pronto");
+                    $humanPlayers = array_filter($jogadores, function($jogador) {
+                        return !$jogador->cpu;
+                    });
+                    $readyMessage = json_encode([
+                        'tipo' => 'ready',
+                        'conteudo' => $from->resourceId
+                    ]);
+                    foreach ($this->clients as $client) {
+                        $client->send(encodeMessage($readyMessage));
+                    }
+                    $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+                    registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
+                    break;
+                case 'notReady':
+                    global $numJogadoresProntos;
+                    global $jogadores;
+                    $numJogadoresProntos--;
+                    registrarNoLog("Jogador " . obterJogadorDeConexao($from)->id . " não está mais pronto");
+                    $humanPlayers = array_filter($jogadores, function($jogador) {
+                        return !$jogador->cpu;
+                    });
+                    $readyMessage = json_encode([
+                        'tipo' => 'notReady',
+                        'conteudo' => $from->resourceId
+                    ]);
+                    foreach ($this->clients as $client) {
+                        $client->send(encodeMessage($readyMessage));
+                    }
+                    $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+                    registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
+                    break;
+                default:
+                    registrarNoLog("Comando desconhecido: $command");
+                    break;
+            }
+        } else {
+            // Interpretar como mensagem de chat
+            $numRecv = count($this->clients) - 1;
+            registrarNoLog(sprintf('Conexão %d enviou mensagem "%s" para %d outras conexões',
+                $from->resourceId, $msg, $numRecv));
+            foreach ($this->clients as $client) {
+                if ($from !== $client) {
+                    $client->send(encodeMessage(json_encode([
+                        "tipo"=>"msg",
+                        "conteudo"=>[
+                            "remetente"=>$from->resourceId,
+                            "msg"=>$msg]])));
+                }
+            }
+        }
+    }
+
+    public function onClose($conn) {
+        $jogador = obterJogadorDeConexao($conn);
+        if ($jogador) {
+            $jogador->usuario = null;
+            $jogador->cpu = true;
+            registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogador->id}");
+        }
+        unset($this->clients[(int)$conn->resourceId]);
+        registrarNoLog("Conexão ({$conn->resourceId}) fechada");
+    }
+
+    public function onError($conn, $e) {
+        registrarNoLog("Erro: {$e->getMessage()}");
+        $conn->close();
+    }
+}
+#endregion
+
+
+
+
+
+#region Variáveis e definições-base
 $muros = [];
 $estados = [];
 $jogadores = [];
@@ -249,6 +475,7 @@ $salas = json_decode(file_get_contents($salasFile), true);
 $salas[] = ['nome' => $salaNome, 'pid' => $pid, 'data_abertura' => $dataAbertura];
 file_put_contents($salasFile, json_encode($salas, JSON_PRETTY_PRINT));
 registrarNoLog("Sala {$salaNome} criada com PID {$pid}");
+#endregion
 
 function inicializarEstadosEJogadores() {
     global $estados, $jogadores, $dataTurno, $numTurnos, $salaNome, $salasFile, $logFile;
@@ -296,6 +523,7 @@ function inicializarEstadosEJogadores() {
 
     foreach ($estrutura as $estadoData) {
         $jogador = new Jogador($estadoData);
+        $jogador->idNome = $jogador->id;
         $jogador->nome = gerarNomeAleatorio();
         $jogadores[] = $jogador;
         $estadoData['controlador'] = $jogador;
@@ -386,18 +614,23 @@ function atribuirConexaoAJogador($conn, $jogadorId) {
     global $jogadores;
 
     // Desfaz a conexão anterior, se houver
-    foreach ($jogadores as $jogador) {
-        if ($jogador->usuario === $conn) {
-            $jogador->usuario = null;
-            $jogador->cpu = true;
-            break;
-        }
+    $jogadorAnterior = obterJogadorDeConexao($conn);
+    $nomeAnterior = null;
+    if ($jogadorAnterior) {
+        $jogadorAnterior->usuario = null;
+        $jogadorAnterior->cpu = true;
+        $nomeAnterior = $jogadorAnterior->nome;
+        $jogadorAnterior->nome = gerarNomeAleatorio();
+        registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogadorAnterior->id}");
     }
 
     foreach ($jogadores as $jogador) {
         if ($jogador->id === $jogadorId) {
             $jogador->usuario = $conn;
             $jogador->cpu = false;
+            if ($nomeAnterior !== null) {
+                $jogador->nome = $nomeAnterior;
+            }
             registrarNoLog("Conexão ({$conn->resourceId}) vinculada ao jogador {$jogador->id}");
             return $jogador;
         }
@@ -409,8 +642,10 @@ function obterJogadorDeConexao($conn) {
     global $jogadores;
 
     foreach ($jogadores as $jogador) {
-        if ($jogador->usuario === $conn) {
-            return $jogador;
+        if ($jogador->usuario != null) {
+            if ($jogador->usuario->resourceId === $conn->resourceId) {
+                return $jogador;
+            }
         }
     }
     return null;
@@ -494,7 +729,7 @@ function iniciarExecucao() {
 }
 
 function verificarEstadoPartida() {
-    global $estadoPartida, $numJogadoresProntos, $jogadores;
+    global $estadoPartida, $numJogadoresProntos, $jogadores, $timerIniciarPartidaLobby, $clients;
     if ($estadoPartida === EstadoPartida::PLANEJAMENTO && obterTempoRestantePlanejamento() <= 0) {
         iniciarExecucao();
     }
@@ -504,179 +739,32 @@ function verificarEstadoPartida() {
         });
         $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
         if ($remainingPlayers === 0) {
-            avancarDataRodada();
-            global $clients;
-            foreach ($clients as $client) {
-                if ($client instanceof Connection) {
-                    $client->send(encodeMessage("start"));
+            if ($timerIniciarPartidaLobby > 0) {
+                $timerIniciarPartidaLobby--;
+                registrarNoLog("Iniciando partida em {$timerIniciarPartidaLobby}...");
+                foreach ($clients as $client) {
+                    if ($client instanceof Connection) {
+                        $client->send(encodeMessage(json_encode([
+                            "tipo" => "msg",
+                            "conteudo" => [
+                                "remetente" => -1,
+                                "msg" => "A partida vai começar em {$timerIniciarPartidaLobby} segundos"
+                            ]
+                        ])));
+                    }
                 }
-            }
-            iniciarPlanejamento();
-        }
-    }
-}
-
-class Chat {
-    protected $clients;
-
-    public function __construct() {
-        $this->clients = array();
-    }
-
-    public function onOpen($conn) {
-        $this->clients[(int)$conn->resourceId] = $conn;
-        registrarNoLog("Nova conexão: ({$conn->resourceId})");
-        $conn->send(encodeMessage(json_encode([
-            'tipo' => 'resourceId',
-            'conteudo' => $conn->resourceId
-        ])));
-        global $jogadores, $estadoPartida;
-        if ($estadoPartida === EstadoPartida::LOBBY) {
-            $jogadoresSemConexao = array_filter($jogadores, function($jogador) {
-                return $jogador->usuario === null;
-            });
-            if (!empty($jogadoresSemConexao)) {
-                $jogadorAleatorio = $jogadoresSemConexao[array_rand($jogadoresSemConexao)];
-                atribuirConexaoAJogador($conn, $jogadorAleatorio->id);
-            }
-            $status = json_encode([
-                'tipo' => 'status',
-                'conteudo' => json_decode(obterStatusPartida())
-            ]);
-            foreach ($this->clients as $client) {
-                $client->send(encodeMessage($status));
-                $client->send(encodeMessage(json_encode([
-                            "tipo"=>"msg",
-                            "conteudo"=>[
-                                "remetente"=>-1,
-                                "msg"=>"{$jogadorAleatorio->nome} entrou na sala"]])));
-            }
-        }
-    }
-
-    public function onMessage($from, $msg) {
-        if (strpos($msg, '\\') === 0) {
-            // Interpretar como comando ao servidor
-            $parts = explode(' ', substr($msg, 1));
-            $command = $parts[0];
-            $args = array_slice($parts, 1);
-            registrarNoLog(sprintf("Comando recebido de %d: $command com argumentos: %s", $from->resourceId, implode(' ', $args)));
-            switch ($command) {
-                case 'stop':
-                    registrarNoLog("Servidor parando...");
-                    exit();
-                    break;
-                case 'reset':
-                    registrarNoLog("Reiniciando estados e jogadores...");
-                    inicializarEstadosEJogadores();
-                    break;
-                case 'check':
-                    $status = obterStatusPartida();
-                    $from->send(encodeMessage($status));
-                    registrarNoLog($status);
-                    break;
-                case 'updateEstados':
-                    $jsonEstados = obterJSONEstados();
-                    $from->send(encodeMessage($jsonEstados));
-                    registrarNoLog(encodeMessage($jsonEstados));
-                    break;
-                case 'nextTurn':
-                    avancarDataRodada();
-                    break;
-                case 'ping':
-                    $from->send(encodeMessage("pong"));
-                    break;
-                case 'linkPlayer':
-                    $jogadorId = $args[0];
-                    $jogador = atribuirConexaoAJogador($from, $jogadorId);
-                    if ($jogador) {
-                        $from->send(encodeMessage("Jogador {$jogador->id} vinculado com sucesso"));
-                    } else {
-                        $from->send(encodeMessage("Jogador não encontrado"));
+            } else {
+                $timerIniciarPartidaLobby = 5;
+                avancarDataRodada();
+                global $clients;
+                foreach ($clients as $client) {
+                    if ($client instanceof Connection) {
+                        $client->send(encodeMessage("start"));
                     }
-                    break;
-                case 'action':
-                    global $estados;
-                    $origemId = $args[0];
-                    switch($args[1]) {
-                        case 'ATQ':
-                            $tipo = TipoAcao::ATAQUE;
-                            break;
-                        case 'DEF':
-                            $tipo = TipoAcao::DEFESA;
-                            break;
-                        case 'REF':
-                            $tipo = TipoAcao::REFORCO;
-                            break;
-                        default:
-                            $from->send(encodeMessage("Tipo de ação desconhecido"));
-                            return;
-                    }
-                    $destinoId = $args[2] ?? null;
-                    $agua = $args[3] ?? false;
-                    $origem = null;
-                    $destino = null;
-                    foreach ($estados as $estado) {
-                        if ($estado->id === $origemId) {
-                            $origem = $estado;
-                        }
-                        if ($estado->id === $destinoId) {
-                            $destino = $estado;
-                        }
-                    }
-                    if ($origem) {
-                        criarAcao($origem, $tipo, $destino, $agua);
-                        $from->send(encodeMessage("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : "")));
-                    } else {
-                        $from->send(encodeMessage("Estado não encontrado"));
-                    }
-                    break;
-                case 'ready':
-                    global $numJogadoresProntos;
-                    global $jogadores;
-                    $numJogadoresProntos++;
-                    registrarNoLog("Jogador " . obterJogadorDeConexao($from)->id . " pronto");
-                    $humanPlayers = array_filter($jogadores, function($jogador) {
-                        return !$jogador->cpu;
-                    });
-                    $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
-                    registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
-                    break;
-                default:
-                    registrarNoLog("Comando desconhecido: $command");
-                    break;
-            }
-        } else {
-            // Interpretar como mensagem de chat
-            $numRecv = count($this->clients) - 1;
-            registrarNoLog(sprintf('Conexão %d enviou mensagem "%s" para %d outras conexões',
-                $from->resourceId, $msg, $numRecv));
-            foreach ($this->clients as $client) {
-                if ($from !== $client) {
-                    $client->send(encodeMessage(json_encode([
-                        "tipo"=>"msg",
-                        "conteudo"=>[
-                            "remetente"=>$from->resourceId,
-                            "msg"=>$msg]])));
                 }
+                iniciarPlanejamento();
             }
         }
-    }
-
-    public function onClose($conn) {
-        $jogador = obterJogadorDeConexao($conn);
-        if ($jogador) {
-            $jogador->usuario = null;
-            $jogador->cpu = true;
-            registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogador->id}");
-        }
-        unset($this->clients[(int)$conn->resourceId]);
-        registrarNoLog("Conexão ({$conn->resourceId}) fechada");
-    }
-
-    public function onError($conn, $e) {
-        registrarNoLog("Erro: {$e->getMessage()}");
-        $conn->close();
     }
 }
 
@@ -691,24 +779,6 @@ function obterJSONEstados() {
         return json_decode($estado->toJson(), true);
     }, $estados);
     return json_encode($estadoData);
-}
-
-class Connection {
-    public $resourceId;
-    public $socket;
-
-    public function __construct($socket) {
-        $this->socket = $socket;
-        $this->resourceId = (int)$socket;
-    }
-
-    public function send($msg) {
-        fwrite($this->socket, $msg);
-    }
-
-    public function close() {
-        fclose($this->socket);
-    }
 }
 
 function perform_handshaking($received_header, $client_conn, $host, $port) {
@@ -780,6 +850,8 @@ if (!$server) {
 registrarNoLog("Servidor em execução!");
 
 $clients = array($server);
+
+$timerIniciarPartidaLobby = 5;
 
 while (true) {
     $read = $clients;

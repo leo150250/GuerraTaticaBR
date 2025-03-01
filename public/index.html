@@ -92,10 +92,19 @@
 			</fieldset>
 			<fieldset>
 				<legend>Info</legend>
-				<label for="selectTerritorioMP">Seu território:</label>
-				<select id="selectTerritorioMP">
-				</select>
-				<img src="#" class="bandeira" id="imagemJogadorMP">
+				<div>
+					<label for="nomeJogadorMP">Seu nome:</label>
+					<input type="text" id="nomeJogadorMP">
+				</div>
+				<div>
+					<label for="selectTerritorioMP">Seu território:</label>
+					<select id="selectTerritorioMP">
+					</select>
+					<img src="#" class="bandeira" id="imagemJogadorMP">
+				</div>
+				<p>Limite de tempo de planejamento: <span>30 s</span></p>
+				<p>Vida inicial dos territórios: <span>♥</span></p>
+				<p>Qtd. de territórios para adição de ações: <span>5</span></p>
 			</fieldset>
 			<fieldset>
 				<legend>Chat</legend>
@@ -106,7 +115,7 @@
 			</fieldset>
 		</div>
 		<div class="menuVertical">
-			<button onclick="mpEstouPronto()">Pronto?</button>
+			<button onclick="mpEstouPronto()" id="botaoProntoMP">Pronto?</button>
 			<button onclick="sairSala()">Sair da sala</button>
 		</div>
 	</dialog>

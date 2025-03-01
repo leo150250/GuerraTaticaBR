@@ -117,6 +117,20 @@ fieldset:has(#chatLobby) {
 		flex-grow: 2;
 	}
 }
+fieldset:has(#nomeJogadorMP) {
+	display: flex;
+	flex-direction: column;
+	text-align: left;
+	& input {
+		width: 100%;
+	}
+	& select {
+		width: calc(100% - 3rem);
+	}
+	& p {
+		margin: 0.25rem;
+	}
+}
 #jogadoresLobby {
 	text-align: left;
 	display: flex;

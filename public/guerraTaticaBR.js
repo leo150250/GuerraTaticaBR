@@ -24,6 +24,8 @@ const divOverlayAviso = document.getElementById("overlayAviso");
 const divTitulo = document.getElementById("titulo");
 const pLoader = document.getElementById("loader");
 const selectTerritorioMP = document.getElementById("selectTerritorioMP");
+const imagemJogadorMP = document.getElementById("imagemJogadorMP");
+const nomeJogadorMP = document.getElementById("nomeJogadorMP");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -68,6 +70,7 @@ var mp_servidor = "teste";
 var mp_porta = 12346
 var mp_id = 0;
 var socket = null;
+var mp_pronto = false;
 
 var gameState = gameStates.STANDBY;
 
@@ -358,6 +361,8 @@ class Jogador {
 		this.botaoEscolhaJogador.appendChild(this.imagemEscolhaJogador);
 		this.botaoEscolhaJogador.appendChild(this.nomeEscolhaJogador);
 		divListaTerritoriosJogadores.appendChild(this.botaoEscolhaJogador);
+
+		this.divJogadorLobby = null;
 	}
 	perder() {
 		acoes.filter(acao => acao.controlador === this).forEach(acao => acao.invalidar());
@@ -1166,31 +1171,47 @@ function entrarSalaIP(servidor = mp_servidor) {
 				const jogadoresLobby = document.getElementById("jogadoresLobby");
 				jogadoresLobby.innerHTML = "";
 				atualizarJogadoresServidor(jsonServidor.conteudo.jogadores);
-				for (let index = 0; index < jsonServidor.conteudo.jogadores.length; index++) {
+				for (let i = 0; i < jogadores.length; i++) {
 
-					console.log(jsonServidor.conteudo.jogadores[index]);
-					const jogador = jsonServidor.conteudo.jogadores[index];
-					const divJogador = document.createElement("div");
-					divJogador.classList.add("jogadorLobby");
-					
-					const imgJogador = document.createElement("img");
-					imgJogador.src = "estrutura/" + jogador.imagem;
-					imgJogador.classList.add("bandeira");
-					imgJogador.title = jogador.id;
-					divJogador.appendChild(imgJogador);
+					//console.log(jsonServidor.conteudo.jogadores[index]);
+					const jogadorMP = jogadores[i];
+					if (jogadorMP.usuario !== null) {
+						const divJogador = document.createElement("div");
+						divJogador.classList.add("jogadorLobby");
+						jogadorMP.divJogadorLobby = divJogador;
+						
+						const imgJogador = document.createElement("img");
+						imgJogador.src = "estrutura/" + jogadorMP.imagem;
+						imgJogador.classList.add("bandeira");
+						imgJogador.title = jogadorMP.id;
+						divJogador.appendChild(imgJogador);
 
-					const nomeJogador = document.createElement("span");
-					nomeJogador.textContent = jogador.nome;
-					divJogador.appendChild(nomeJogador);
-					
-					jogadoresLobby.appendChild(divJogador);
+						const nomeJogador = document.createElement("span");
+						nomeJogador.textContent = jogadorMP.nome;
+						divJogador.appendChild(nomeJogador);
+						
+						jogadoresLobby.appendChild(divJogador);
 
-					if (jogador.jogador === mp_id) {
-						selectTerritorioMP.value = jogador.id;
-						const imagemJogadorMP = document.getElementById("imagemJogadorMP");
-						imagemJogadorMP.src = "estrutura/" + jogador.imagem;
-						imagemJogadorMP.title = jogador.nome;
+						if (jogadorMP.usuario === mp_id) {
+							selectTerritorioMP.value = jogadorMP.id;
+							imagemJogadorMP.src = "estrutura/" + jogadorMP.imagem;
+							imagemJogadorMP.title = jogadorMP.nome;
+							jogador = jogadorMP;
+							nomeJogadorMP.value = jogadorMP.nome;
+						}
 					}
+				}
+				break;
+			case "ready":
+				const jogadorPronto = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo);
+				if (jogadorPronto && jogadorPronto.divJogadorLobby) {
+					jogadorPronto.divJogadorLobby.style.backgroundColor = "green";
+				}
+				break;
+			case "notReady":
+				const jogadorNaoPronto = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo);
+				if (jogadorNaoPronto && jogadorNaoPronto.divJogadorLobby) {
+					jogadorNaoPronto.divJogadorLobby.style.backgroundColor = null;
 				}
 				break;
 			case "msg":
@@ -1243,6 +1264,7 @@ function exibirLobby() {
 		option.textContent = jogador.nome;
 		selectTerritorioMP.appendChild(option);
 	});
+
 	selectTerritorioMP.addEventListener("change", (event) => {
 		const selectedOption = event.target.value;
 		const jogadorSelecionado = jogadores.find(jogador => jogador.id === selectedOption);
@@ -1251,6 +1273,13 @@ function exibirLobby() {
 			imagemJogadorMP.src = "estrutura/" + jogadorSelecionado.imagem;
 			imagemJogadorMP.title = jogadorSelecionado.nome;
 			socket.send("\\linkPlayer "+selectedOption);
+		}
+	});
+
+	nomeJogadorMP.addEventListener("change", (event) => {
+		const novoNome = event.target.value.trim();
+		if (novoNome !== "" && jogador.nome !== novoNome) {
+			socket.send(`\\renamePlayer ${novoNome}`);
 		}
 	});
 }
@@ -1280,6 +1309,16 @@ function atualizarJogadoresServidor(argJSONJogadores) {
 		}
 	});
 }
+function mpEstouPronto() {
+	mp_pronto = !mp_pronto;
+	if (mp_pronto) {
+		socket.send("\\ready");
+		botaoProntoMP.style.backgroundColor = "green";
+	} else {
+		socket.send("\\notReady");
+		botaoProntoMP.style.backgroundColor = "";
+	}
+}
 //#endregion
 
 
@@ -1291,8 +1330,8 @@ async function inicializar() {
 	pLoader.innerHTML = "";
 	svgMapa = svgMapaObject.contentDocument.documentElement;
 	iniciarEstados();
-	dialogPrincipal.showModal();
-	//entrarSalaIP("localhost");
+	//dialogPrincipal.showModal();
+	entrarSalaIP("localhost");
 	//rodarTurno();
 	//exibirOverlayJogadorPerdeu();
 }
