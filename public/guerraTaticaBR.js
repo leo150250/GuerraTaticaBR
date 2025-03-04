@@ -824,34 +824,40 @@ function acaoConstruir() {
 function acaoCancelar() {
 	definirGameState(gameStates.ESTADOSELECIONADO,true);
 }
-function rodarTurno(argForcar = false) {
-	if (!argForcar) {
-		if (numAcoesMax - numAcoes > 0) {
-			const proceed = confirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
-			if (!proceed) {
-				definirGameState(gameStates.STANDBY);
-				return;
-			}
+function rodarTurno() {
+	if (numAcoesMax - numAcoes > 0) {
+		const proceed = confirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
+		if (!proceed) {
+			definirGameState(gameStates.STANDBY);
+			return;
 		}
 	}
-	logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	definirGameState(gameStates.AGUARDAR);
-	etapasTurnos = etapaTurno();
-	exibirOverlayInicio();
-	numTurnos++;
-	intervalosTurnos = setInterval(()=>{
-		etapasTurnos.next();
-	}, tempoTurnos);
+	if (multiplayer) {
+		logExecucao("Aguardando os demais jogadores...");
+		definirGameState(gameStates.AGUARDAR);
+		socket.send("\\ready");
+	} else {
+		logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+		definirGameState(gameStates.AGUARDAR);
+		etapasTurnos = etapaTurno();
+		exibirOverlayInicio();
+		numTurnos++;
+		intervalosTurnos = setInterval(()=>{
+			etapasTurnos.next();
+		}, tempoTurnos);
+	}
 
 }
 function* etapaTurno() {
-	executarCPUs();
+	if (!multiplayer) {
+		executarCPUs();
 
-	acoes = acoes.sort(() => Math.random() - 0.5);
-	divListaAcoes.innerHTML = "";
-	acoes.forEach(acao => {
-		divListaAcoes.appendChild(acao.el);
-	});
+		acoes = acoes.sort(() => Math.random() - 0.5);
+		divListaAcoes.innerHTML = "";
+		acoes.forEach(acao => {
+			divListaAcoes.appendChild(acao.el);
+		});
+	}
 
 	for (let i = 0; i < acoes.length; i++) {
 		if (acoes[i].executar()) {
@@ -1297,7 +1303,14 @@ function entrarSalaIP(servidor = mp_servidor) {
 						new Acao(origem, tipo, destino, agua);
 					}
 				});
-				rodarTurno();
+				logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+				definirGameState(gameStates.AGUARDAR);
+				etapasTurnos = etapaTurno();
+				exibirOverlayInicio();
+				numTurnos++;
+				intervalosTurnos = setInterval(()=>{
+					etapasTurnos.next();
+				}, tempoTurnos);
 				break;
 			}
 		}
