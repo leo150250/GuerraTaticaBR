@@ -33,6 +33,7 @@ const gameStates = {
 	ATACARESTADO: "ATACARESTADO",
 	CONSTRUIRMURO: "CONSTRUIRMURO",
 	AGUARDAR: "AGUARDAR",
+	LOBBY: "LOBBY",
 }
 const tiposAcoes = {
 	ATAQUE: "atq",
@@ -336,6 +337,7 @@ class Jogador {
 	constructor(argId,argNome,argSVGId,argCorMatiz,argCorSaturacao,argUsuario = null) {
 		this.id = argId;
 		this.nome = argNome;
+		this.nomeEstado = argNome;
 		this.svgId = argSVGId;
 		this.imagem = this.svgId + ".svg";
 		this.usuario = argUsuario;
@@ -357,7 +359,7 @@ class Jogador {
 		this.imagemEscolhaJogador = document.createElement("img")
 		this.imagemEscolhaJogador.src = "estrutura/" + this.svgId + ".svg";
 		this.nomeEscolhaJogador = document.createElement("p");
-		this.nomeEscolhaJogador.innerHTML = this.nome;
+		this.nomeEscolhaJogador.innerHTML = this.nomeEstado;
 		this.botaoEscolhaJogador.appendChild(this.imagemEscolhaJogador);
 		this.botaoEscolhaJogador.appendChild(this.nomeEscolhaJogador);
 		divListaTerritoriosJogadores.appendChild(this.botaoEscolhaJogador);
@@ -511,7 +513,9 @@ function obterJogador(argSigla) {
 }
 function definirJogador(argJogador=null) {
 	jogador = obterJogador(argJogador);
-	divTitulo.style.display = "none";
+	if (gameState != gameStates.LOBBY) {
+		divTitulo.style.display = "none";
+	}
 	if (jogador!=null) {
 		jogador.cpu = false;
 		jogador.usuario = "AAAAA";
@@ -529,8 +533,8 @@ function definirJogador(argJogador=null) {
 		atualizarQuantidadeDeAcoes();
 
 		logExecucao("Você está jogando como: " + estadoJogador.nome + " (" + estadoJogador.id + ")");
-		console.log(obterJSONEstados());
-		console.log(obterHashEstados());
+		//console.log(obterJSONEstados());
+		//console.log(obterHashEstados());
 	} else {
 		numAcoesMax = 0;
 	}
@@ -677,6 +681,22 @@ function definirGameState(argGameState,argVoltar = false) {
 					}
 					divBotoesAcoes.classList.remove("cancelar");
 					new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado,ataquePorAgua);
+					if (multiplayer) {
+						let tipoAcao = "";
+						switch (tipo) {
+							case tiposAcoes.ATAQUE:
+								tipoAcao = "ATQ";
+								break;
+							case tiposAcoes.DEFESA:
+								tipoAcao = "DEF";
+								break;
+							case tiposAcoes.REFORCO:
+								tipoAcao = "REF";
+								break;
+						}
+						let mensagem = `\\action ${estadoSelecionadoAntes.id} ${tipoAcao} ${estadoSelecionado.id} ${ataquePorAgua}`;
+						socket.send(mensagem);
+					}
 					estadoSelecionadoAntes.vizinhos.forEach(vizinho => {
 						vizinho.svg.classList.remove("atacar");
 						vizinho.svg.classList.remove("murar");
@@ -804,12 +824,14 @@ function acaoConstruir() {
 function acaoCancelar() {
 	definirGameState(gameStates.ESTADOSELECIONADO,true);
 }
-function rodarTurno() {
-	if (numAcoesMax - numAcoes > 0) {
-		const proceed = confirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
-		if (!proceed) {
-			definirGameState(gameStates.STANDBY);
-			return;
+function rodarTurno(argForcar = false) {
+	if (!argForcar) {
+		if (numAcoesMax - numAcoes > 0) {
+			const proceed = confirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
+			if (!proceed) {
+				definirGameState(gameStates.STANDBY);
+				return;
+			}
 		}
 	}
 	logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
@@ -1166,7 +1188,10 @@ function entrarSalaIP(servidor = mp_servidor) {
 		let jsonServidor = JSON.parse(event.data);
 		console.log(jsonServidor);
 		switch (jsonServidor.tipo) {
-			case "resourceId": mp_id = parseInt(jsonServidor.conteudo); break;
+			case "infoServer":
+				mp_id = parseInt(jsonServidor.conteudo.resourceId);
+				timerPlanejamento = parseInt(jsonServidor.conteudo.timerPlan);
+				break;
 			case "status": 
 				const jogadoresLobby = document.getElementById("jogadoresLobby");
 				jogadoresLobby.innerHTML = "";
@@ -1196,8 +1221,8 @@ function entrarSalaIP(servidor = mp_servidor) {
 							selectTerritorioMP.value = jogadorMP.id;
 							imagemJogadorMP.src = "estrutura/" + jogadorMP.imagem;
 							imagemJogadorMP.title = jogadorMP.nome;
-							jogador = jogadorMP;
 							nomeJogadorMP.value = jogadorMP.nome;
+							definirJogador(jogadorMP.id);
 						}
 					}
 				}
@@ -1241,7 +1266,40 @@ function entrarSalaIP(servidor = mp_servidor) {
 				}
 
 				document.getElementById("chatLobby").appendChild(divMensagem);
+				divMensagem.scrollIntoView();
 				break;
+			case "plan": {
+				if (gameState === gameStates.LOBBY) {
+					dialogLobby.close();
+					divTitulo.style.display = "none";
+					multiplayer = true;
+				}
+				definirGameState(gameStates.STANDBY);
+				divBarraInferior.innerHTML="";
+				logExecucao("Bem-vindo ao GuerraTaticaBR!");
+				pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
+				logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+				console.log("Jogo pronto!");
+				atualizarBarraStatus();
+				atualizarOverlayRanking();
+				divOverlayAviso.style.display = "none";
+				zoomMapa(0);
+				break;
+			}
+			case "action": {
+				jsonServidor.conteudo.forEach(acaoData => {
+					const origem = obterEstado(acaoData.origem);
+					const destino = acaoData.destino ? obterEstado(acaoData.destino) : null;
+					const tipo = Object.values(tiposAcoes).find(t => t === acaoData.tipo.toLowerCase());
+					const agua = acaoData.agua;
+
+					if (origem && tipo) {
+						new Acao(origem, tipo, destino, agua);
+					}
+				});
+				rodarTurno();
+				break;
+			}
 		}
 	};
 
@@ -1254,6 +1312,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 	};
 }
 function exibirLobby() {
+	definirGameState(gameStates.LOBBY);
 	dialogLobby.showModal();
 	
 	selectTerritorioMP.innerHTML = "";
@@ -1290,6 +1349,26 @@ function enviarMensagemChat() {
 		socket.send(mensagem);
 		inputMensagem.value = "";
 		inputMensagem.focus();
+
+		const divMensagem = document.createElement("div");
+		divMensagem.classList.add("mensagemChat");
+
+		const imgJogador = document.createElement("img");
+		imgJogador.src = "estrutura/" + jogador.imagem;
+		imgJogador.classList.add("bandeira");
+		imgJogador.title = jogador.id;
+		divMensagem.appendChild(imgJogador);
+
+		const nomeJogador = document.createElement("span");
+		nomeJogador.textContent = "Você diz:";
+		divMensagem.appendChild(nomeJogador);
+
+		const textoMensagem = document.createElement("p");
+		textoMensagem.textContent = mensagem;
+		divMensagem.appendChild(textoMensagem);
+
+		document.getElementById("chatLobby").appendChild(divMensagem);
+		divMensagem.scrollIntoView();
 	}
 }
 document.getElementById("mensagemChatLobby").addEventListener("keydown", function(event) {
@@ -1301,11 +1380,16 @@ function sairSala() {
 
 }
 function atualizarJogadoresServidor(argJSONJogadores) {
-	argJSONJogadores.forEach(jogadorData => {
-		let jogador = jogadores.find(j => j.id === jogadorData.id);
-		if (jogador) {
+	jogadores.forEach(jogador => {
+		const jogadorData = argJSONJogadores.find(j => j.id === jogador.id);
+		if (jogadorData) {
 			jogador.nome = jogadorData.nome;
 			jogador.usuario = jogadorData.jogador;
+			jogador.cpu = false;
+		} else {
+			jogador.nome = jogador.nomeEstado;
+			jogador.usuario = null;
+			jogador.cpu = true;
 		}
 	});
 }
@@ -1318,6 +1402,8 @@ function mpEstouPronto() {
 		socket.send("\\notReady");
 		botaoProntoMP.style.backgroundColor = "";
 	}
+	selectTerritorioMP.disabled = mp_pronto;
+	nomeJogadorMP.disabled = mp_pronto;
 }
 //#endregion
 

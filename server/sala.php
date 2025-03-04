@@ -13,6 +13,12 @@ enum TipoAcao: string {
         };
     }
 }
+enum EstadoPartida: string {
+    case LOBBY = 'LOBBY';
+    case PLANEJAMENTO = 'PLANEJAMENTO';
+    case EXECUCAO = 'EXECUCAO';
+    case AGUARDANDO = 'AGUARDANDO';
+}
 
 class Estado {
     public $id;
@@ -252,9 +258,13 @@ class Chat {
     public function onOpen($conn) {
         $this->clients[(int)$conn->resourceId] = $conn;
         registrarNoLog("Nova conexão: ({$conn->resourceId})");
+        global $tempoPlanejamento;
         $conn->send(encodeMessage(json_encode([
-            'tipo' => 'resourceId',
-            'conteudo' => $conn->resourceId
+            'tipo' => 'infoServer',
+            'conteudo' => [
+                'resourceId' => $conn->resourceId,
+                'timerPlan' => $tempoPlanejamento
+            ]
         ])));
         global $jogadores, $estadoPartida;
         if ($estadoPartida === EstadoPartida::LOBBY) {
@@ -443,6 +453,10 @@ class Chat {
         registrarNoLog("Erro: {$e->getMessage()}");
         $conn->close();
     }
+
+    public function obterClientes() {
+        return $this->clients;
+    }
 }
 #endregion
 
@@ -454,7 +468,6 @@ class Chat {
 $muros = [];
 $estados = [];
 $jogadores = [];
-$numJogadoresProntos = 0;
 $acoes = [];
 $dataTurno = new DateTime();
 $numTurnos = 0;
@@ -464,19 +477,299 @@ $pid = getmypid();
 $dataAbertura = date('Y-m-d H:i:s');
 $salasFile = __DIR__ . '/sistema/.dados/salas.json';
 $logFile = __DIR__ . "/sistema/.dados/{$salaNome}_log.txt";
+
+$estadoPartida = EstadoPartida::LOBBY;
+$tempoPlanejamento = 30; // segundos
+$inicioPlanejamento = null;
+$chat = new Chat();
+$server = stream_socket_server("tcp://0.0.0.0:12346", $errno, $errstr);
+if (!$server) {
+    registrarNoLog("Erro ao abrir o servidor: $errstr ($errno)");
+    die();
+}
+$clients = array($server);
+$timerIniciarPartidaLobby = 5;
+$numJogadoresProntos = 0;
+
+register_shutdown_function('encerraSala');
+#endregion
+
+
+
+
+#region Funções de servidor
 function registrarNoLog($mensagem) {
     global $logFile;
     file_put_contents($logFile, date('Y-m-d H:i:s') . " - " . $mensagem . PHP_EOL, FILE_APPEND);
     echo $mensagem . "\n";
 }
+function encerraSala() {
+    global $salaNome, $salasFile;
 
-// Registra uma nova sala no arquivo salas.json
-$salas = json_decode(file_get_contents($salasFile), true);
-$salas[] = ['nome' => $salaNome, 'pid' => $pid, 'data_abertura' => $dataAbertura];
-file_put_contents($salasFile, json_encode($salas, JSON_PRETTY_PRINT));
-registrarNoLog("Sala {$salaNome} criada com PID {$pid}");
+    // Remove a entrada da sala no arquivo salas.json
+    $salas = json_decode(file_get_contents($salasFile), true);
+    $salas = array_filter($salas, function($sala) {
+        global $salaNome;
+        return $sala['nome'] !== $salaNome;
+    });
+    file_put_contents($salasFile, json_encode(array_values($salas), JSON_PRETTY_PRINT));
+
+    registrarNoLog("Sala {$salaNome} encerrada");
+}
+function obterStatusPartida() {
+    global $dataTurno, $numTurnos, $jogadores;
+    $hash = obterHashEstados();
+    $jogadoresData = [];
+    foreach ($jogadores as $jogador) {
+        if ($jogador->usuario!==null) {
+            $jogadoresData[] = [
+                'id' => $jogador->id,
+                'jogador' => $jogador->usuario->resourceId,
+                'nome' => $jogador->nome,
+                'imagem' => $jogador->imagem,
+            ];
+        }
+    }
+    $status = [
+        'data' => $dataTurno->format('Y-m'),
+        'numTurnos' => $numTurnos,
+        'hash' => $hash,
+        'jogadores' => $jogadoresData
+    ];
+    return json_encode($status);
+}
+function atribuirConexaoAJogador($conn, $jogadorId) {
+    global $jogadores;
+
+    // Desfaz a conexão anterior, se houver
+    $jogadorAnterior = obterJogadorDeConexao($conn);
+    $nomeAnterior = null;
+    if ($jogadorAnterior) {
+        $jogadorAnterior->usuario = null;
+        $jogadorAnterior->cpu = true;
+        $nomeAnterior = $jogadorAnterior->nome;
+        $jogadorAnterior->nome = gerarNomeAleatorio();
+        registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogadorAnterior->id}");
+    }
+
+    foreach ($jogadores as $jogador) {
+        if ($jogador->id === $jogadorId) {
+            $jogador->usuario = $conn;
+            $jogador->cpu = false;
+            if ($nomeAnterior !== null) {
+                $jogador->nome = $nomeAnterior;
+            }
+            registrarNoLog("Conexão ({$conn->resourceId}) vinculada ao jogador {$jogador->id}");
+            return $jogador;
+        }
+    }
+    return null;
+}
+function obterJogadorDeConexao($conn) {
+    global $jogadores;
+
+    foreach ($jogadores as $jogador) {
+        if ($jogador->usuario != null) {
+            if ($jogador->usuario->resourceId === $conn->resourceId) {
+                return $jogador;
+            }
+        }
+    }
+    return null;
+}
+function iniciarPlanejamento() {
+    global $estadoPartida, $inicioPlanejamento, $chat, $dataTurno;
+    $estadoPartida = EstadoPartida::PLANEJAMENTO;
+    $inicioPlanejamento = time();
+    foreach ($chat->obterClientes() as $client) {
+        if ($client instanceof Connection) {
+            $client->send(encodeMessage(json_encode([
+                "tipo" => "plan",
+                "conteudo" => [
+                    'data' => $dataTurno->format('Y-m'),
+                ]
+            ])));
+        }
+    }
+    registrarNoLog("Rodada de planejamento iniciada");
+}
+function obterTempoRestantePlanejamento() {
+    global $inicioPlanejamento, $tempoPlanejamento;
+    if ($inicioPlanejamento === null) {
+        return $tempoPlanejamento;
+    }
+    $tempoPassado = time() - $inicioPlanejamento;
+    return max(0, $tempoPlanejamento - $tempoPassado);
+}
+function iniciarExecucao() {
+    global $acoes, $estadoPartida, $numJogadoresProntos, $chat;
+    $estadoPartida = EstadoPartida::EXECUCAO;
+    registrarNoLog("Rodada de execução iniciada");
+    shuffle($acoes);
+    $jsonAcoes = obterJSONAcoes();
+    foreach ($chat->obterClientes() as $client) {
+        if ($client instanceof Connection) {
+            $client->send(encodeMessage(json_encode([
+                'tipo' => 'acoes',
+                'conteudo' => $jsonAcoes
+            ])));
+        }
+    }
+
+    $status = json_encode([
+        'tipo' => 'status',
+        'conteudo' => json_decode(obterStatusPartida())
+    ]);
+    foreach ($chat->obterClientes() as $client) {
+        if ($client instanceof Connection) {
+            $client->send(encodeMessage($status));
+        }
+    }
+    executarAcoes();
+    $estadoPartida = EstadoPartida::AGUARDANDO;
+    registrarNoLog("Estado da partida definido para AGUARDANDO");
+    $numJogadoresProntos = 0;
+}
+function verificarEstadoPartida() {
+    global $estadoPartida, $numJogadoresProntos, $jogadores, $timerIniciarPartidaLobby, $clients, $chat;
+    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && obterTempoRestantePlanejamento() <= 0) {
+        iniciarExecucao();
+    }
+    if ($estadoPartida === EstadoPartida::LOBBY) {
+        $humanPlayers = array_filter($jogadores, function($jogador) {
+            return !$jogador->cpu;
+        });
+        if (count($humanPlayers) >= 2) {
+            $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+            if ($remainingPlayers === 0) {
+                if ($timerIniciarPartidaLobby > 0) {
+                    registrarNoLog("Iniciando partida em {$timerIniciarPartidaLobby}...");
+                    foreach ($chat->obterClientes() as $client) {
+                        if ($client instanceof Connection) {
+                            $client->send(encodeMessage(json_encode([
+                                "tipo" => "msg",
+                                "conteudo" => [
+                                    "remetente" => -1,
+                                    "msg" => "A partida vai começar em {$timerIniciarPartidaLobby} segundos"
+                                ]
+                            ])));
+                        }
+                    }
+                    $timerIniciarPartidaLobby--;
+                } else {
+                    $timerIniciarPartidaLobby = 5;
+                    iniciarPlanejamento();
+                }
+            } else {
+                registrarNoLog("Aguardando mais jogadores...");
+                $timerIniciarPartidaLobby = 5;
+            }
+        } else {
+            registrarNoLog("Aguardando mais jogadores...");
+        }
+    }
+    if ($estadoPartida === EstadoPartida::AGUARDANDO) {
+        $humanPlayers = array_filter($jogadores, function($jogador) {
+            return !$jogador->cpu;
+        });
+        if (count($humanPlayers) >= 2) {
+            $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+            echo "Aguardando jogadores: " . $remainingPlayers . "\n";
+            if ($remainingPlayers === 0) {
+                avancarDataRodada();
+                iniciarPlanejamento();
+            }
+        } else {
+            registrarNoLog("Não há jogadores humanos suficientes pra continuar!");
+            die();
+        }
+    }
+}
+function obterHashEstados() {
+    $hash = md5(obterJSONEstados());
+    return $hash;
+}
+function obterJSONEstados() {
+    global $estados;
+    $estadoData = array_map(function($estado) {
+        return json_decode($estado->toJson(), true);
+    }, $estados);
+    return json_encode($estadoData);
+}
+function obterJSONAcoes() {
+    global $acoes;
+    $acaoData = array_map(function($acao) {
+        return [
+            'origem' => $acao->origem->id,
+            'tipo' => $acao->tipo->toString(),
+            'destino' => $acao->destino ? $acao->destino->id : null,
+            'agua' => $acao->agua
+        ];
+    }, $acoes);
+    return json_encode($acaoData);
+}
+//Funções de handshaking. Coisa avançada, não sei explicar o que acontece aqui
+function perform_handshaking($received_header, $client_conn, $host, $port) {
+    $headers = array();
+    $lines = preg_split("/\r\n/", $received_header);
+    foreach ($lines as $line) {
+        $line = chop($line);
+        if (preg_match('/\A(\S+): (.*)\z/', $line, $matches)) {
+            $headers[$matches[1]] = $matches[2];
+        }
+    }
+
+    $secKey = $headers['Sec-WebSocket-Key'];
+    $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+
+    $upgrade = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
+               "Upgrade: websocket\r\n" .
+               "Connection: Upgrade\r\n" .
+               "WebSocket-Origin: $host\r\n" .
+               "WebSocket-Location: ws://$host:$port\r\n" .
+               "Sec-WebSocket-Accept:$secAccept\r\n\r\n";
+    fwrite($client_conn, $upgrade);
+}
+function unmask($payload) {
+    $length = ord($payload[1]) & 127;
+
+    if ($length == 126) {
+        $masks = substr($payload, 4, 4);
+        $data = substr($payload, 8);
+    } elseif ($length == 127) {
+        $masks = substr($payload, 10, 4);
+        $data = substr($payload, 14);
+    } else {
+        $masks = substr($payload, 2, 4);
+        $data = substr($payload, 6);
+    }
+
+    $text = '';
+    for ($i = 0; $i < strlen($data); ++$i) {
+        $text .= $data[$i] ^ $masks[$i % 4];
+    }
+    return $text;
+}
+function encodeMessage($msg) {
+    $b1 = 0x80 | (0x1 & 0x0f); // 0x1 text frame (FIN + opcode)
+    $length = strlen($msg);
+
+    if ($length <= 125) {
+        $header = pack('CC', $b1, $length);
+    } elseif ($length > 125 && $length < 65536) {
+        $header = pack('CCn', $b1, 126, $length);
+    } else {
+        $header = pack('CCNN', $b1, 127, $length);
+    }
+
+    return $header . $msg;
+}
 #endregion
 
+
+
+
+#region Funções jogo
 function inicializarEstadosEJogadores() {
     global $estados, $jogadores, $dataTurno, $numTurnos, $salaNome, $salasFile, $logFile;
 
@@ -533,7 +826,6 @@ function inicializarEstadosEJogadores() {
 
     registrarNoLog("Estados e jogadores inicializados");
 }
-
 function gerarNomeAleatorio() {
     $titulos = ["Ten", "Sgt", "Cmd", "Alm", "Cap", "Maj", "Cel", "Gen", "Cb"];
     $animais = ["Tigre", "Onca", "Macaco", "Cavalo", "Leao", "Elefante", "Girafa", "Zebra", "Hipopotamo", "Rinoceronte", "Canguru", "Panda", "Lobo", "Raposa", "Urso", "Coelho", "Gato", "Cachorro", "Papagaio", "Arara"];
@@ -563,101 +855,18 @@ function gerarNomeAleatorio() {
     }
     return $nomeCompleto;
 }
-
-function encerraSala() {
-    global $salaNome, $salasFile;
-
-    // Remove a entrada da sala no arquivo salas.json
-    $salas = json_decode(file_get_contents($salasFile), true);
-    $salas = array_filter($salas, function($sala) {
-        global $salaNome;
-        return $sala['nome'] !== $salaNome;
-    });
-    file_put_contents($salasFile, json_encode(array_values($salas), JSON_PRETTY_PRINT));
-
-    registrarNoLog("Sala {$salaNome} encerrada");
-}
-// Registra a função de encerramento
-register_shutdown_function('encerraSala');
-
 function avancarDataRodada() {
     global $dataTurno, $numTurnos;
     $dataTurno->modify('+1 month');
     $numTurnos++;
     registrarNoLog("Data avançada para: " . $dataTurno->format('F Y'));
 }
-
-function obterStatusPartida() {
-    global $dataTurno, $numTurnos, $jogadores;
-    $hash = obterHashEstados();
-    $jogadoresData = [];
-    foreach ($jogadores as $jogador) {
-        if ($jogador->usuario!==null) {
-            $jogadoresData[] = [
-                'id' => $jogador->id,
-                'jogador' => $jogador->usuario->resourceId,
-                'nome' => $jogador->nome,
-                'imagem' => $jogador->imagem,
-            ];
-        }
-    }
-    $status = [
-        'data' => $dataTurno->format('Y-m'),
-        'numTurnos' => $numTurnos,
-        'hash' => $hash,
-        'jogadores' => $jogadoresData
-    ];
-    return json_encode($status);
-}
-
-function atribuirConexaoAJogador($conn, $jogadorId) {
-    global $jogadores;
-
-    // Desfaz a conexão anterior, se houver
-    $jogadorAnterior = obterJogadorDeConexao($conn);
-    $nomeAnterior = null;
-    if ($jogadorAnterior) {
-        $jogadorAnterior->usuario = null;
-        $jogadorAnterior->cpu = true;
-        $nomeAnterior = $jogadorAnterior->nome;
-        $jogadorAnterior->nome = gerarNomeAleatorio();
-        registrarNoLog("Conexão ({$conn->resourceId}) desvinculada do jogador {$jogadorAnterior->id}");
-    }
-
-    foreach ($jogadores as $jogador) {
-        if ($jogador->id === $jogadorId) {
-            $jogador->usuario = $conn;
-            $jogador->cpu = false;
-            if ($nomeAnterior !== null) {
-                $jogador->nome = $nomeAnterior;
-            }
-            registrarNoLog("Conexão ({$conn->resourceId}) vinculada ao jogador {$jogador->id}");
-            return $jogador;
-        }
-    }
-    return null;
-}
-
-function obterJogadorDeConexao($conn) {
-    global $jogadores;
-
-    foreach ($jogadores as $jogador) {
-        if ($jogador->usuario != null) {
-            if ($jogador->usuario->resourceId === $conn->resourceId) {
-                return $jogador;
-            }
-        }
-    }
-    return null;
-}
-
 function criarAcao($origem, TipoAcao $tipo, $destino = null, $agua = false) {
     global $acoes;
     $acao = new Acao($origem, $tipo, $destino, $agua);
     $acoes[] = $acao;
     registrarNoLog("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : ""));
 }
-
 function executarAcoes() {
     global $acoes;
     foreach ($acoes as $acao) {
@@ -669,189 +878,42 @@ function executarAcoes() {
     });
 }
 
-// Inicializar estados e jogadores
+#endregion
+
+
+
+
+
+#region Inicialização servidor
+// Registra uma nova sala no arquivo salas.json
+$salas = json_decode(file_get_contents($salasFile), true);
+$salas[] = ['nome' => $salaNome, 'pid' => $pid, 'data_abertura' => $dataAbertura];
+file_put_contents($salasFile, json_encode($salas, JSON_PRETTY_PRINT));
+registrarNoLog("Sala {$salaNome} criada com PID {$pid}");
+
 inicializarEstadosEJogadores();
 
+registrarNoLog("Servidor em execução!");
+
+
+
+#endregion
 // Exemplo de criação e execução de ações
 // criarAcao($estados[0], TipoAcao::ATAQUE, $estados[1]);
 // executarAcoes();
 
-enum EstadoPartida: string {
-    case LOBBY = 'LOBBY';
-    case PLANEJAMENTO = 'PLANEJAMENTO';
-    case EXECUCAO = 'EXECUCAO';
-    case AGUARDANDO = 'AGUARDANDO';
-}
 
-$estadoPartida = EstadoPartida::LOBBY;
-$tempoPlanejamento = 30; // segundos
-$inicioPlanejamento = null;
 
-function iniciarPlanejamento() {
-    global $estadoPartida, $inicioPlanejamento;
-    $estadoPartida = EstadoPartida::PLANEJAMENTO;
-    $inicioPlanejamento = time();
-    registrarNoLog("Rodada de planejamento iniciada");
-}
 
-function obterTempoRestantePlanejamento() {
-    global $inicioPlanejamento, $tempoPlanejamento;
-    if ($inicioPlanejamento === null) {
-        return $tempoPlanejamento;
-    }
-    $tempoPassado = time() - $inicioPlanejamento;
-    return max(0, $tempoPlanejamento - $tempoPassado);
-}
 
-function iniciarExecucao() {
-    global $acoes, $estadoPartida, $numJogadoresProntos;
-    $estadoPartida = EstadoPartida::EXECUCAO;
-    registrarNoLog("Rodada de execução iniciada");
-    shuffle($acoes);
-    executarAcoes();
-    $estadoPartida = EstadoPartida::AGUARDANDO;
-    registrarNoLog("Estado da partida definido para AGUARDANDO");
-    $numJogadoresProntos = 0;
-    global $clients;
-    $jsonAcoes = json_encode(array_map(function($acao) {
-        return [
-            'origem' => $acao->origem->id,
-            'tipo' => $acao->tipo->toString(),
-            'destino' => $acao->destino ? $acao->destino->id : null,
-            'agua' => $acao->agua
-        ];
-    }, $acoes));
-    foreach ($clients as $client) {
-        if ($client instanceof Connection) {
-            $client->send(encodeMessage($jsonAcoes));
-        }
-    }
-}
 
-function verificarEstadoPartida() {
-    global $estadoPartida, $numJogadoresProntos, $jogadores, $timerIniciarPartidaLobby, $clients;
-    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && obterTempoRestantePlanejamento() <= 0) {
-        iniciarExecucao();
-    }
-    if ($estadoPartida === EstadoPartida::AGUARDANDO) {
-        $humanPlayers = array_filter($jogadores, function($jogador) {
-            return !$jogador->cpu;
-        });
-        $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
-        if ($remainingPlayers === 0) {
-            if ($timerIniciarPartidaLobby > 0) {
-                $timerIniciarPartidaLobby--;
-                registrarNoLog("Iniciando partida em {$timerIniciarPartidaLobby}...");
-                foreach ($clients as $client) {
-                    if ($client instanceof Connection) {
-                        $client->send(encodeMessage(json_encode([
-                            "tipo" => "msg",
-                            "conteudo" => [
-                                "remetente" => -1,
-                                "msg" => "A partida vai começar em {$timerIniciarPartidaLobby} segundos"
-                            ]
-                        ])));
-                    }
-                }
-            } else {
-                $timerIniciarPartidaLobby = 5;
-                avancarDataRodada();
-                global $clients;
-                foreach ($clients as $client) {
-                    if ($client instanceof Connection) {
-                        $client->send(encodeMessage("start"));
-                    }
-                }
-                iniciarPlanejamento();
-            }
-        }
-    }
-}
 
-function obterHashEstados() {
-    $hash = md5(obterJSONEstados());
-    return $hash;
-}
 
-function obterJSONEstados() {
-    global $estados;
-    $estadoData = array_map(function($estado) {
-        return json_decode($estado->toJson(), true);
-    }, $estados);
-    return json_encode($estadoData);
-}
 
-function perform_handshaking($received_header, $client_conn, $host, $port) {
-    $headers = array();
-    $lines = preg_split("/\r\n/", $received_header);
-    foreach ($lines as $line) {
-        $line = chop($line);
-        if (preg_match('/\A(\S+): (.*)\z/', $line, $matches)) {
-            $headers[$matches[1]] = $matches[2];
-        }
-    }
 
-    $secKey = $headers['Sec-WebSocket-Key'];
-    $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
 
-    $upgrade = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
-               "Upgrade: websocket\r\n" .
-               "Connection: Upgrade\r\n" .
-               "WebSocket-Origin: $host\r\n" .
-               "WebSocket-Location: ws://$host:$port\r\n" .
-               "Sec-WebSocket-Accept:$secAccept\r\n\r\n";
-    fwrite($client_conn, $upgrade);
-}
 
-function unmask($payload) {
-    $length = ord($payload[1]) & 127;
 
-    if ($length == 126) {
-        $masks = substr($payload, 4, 4);
-        $data = substr($payload, 8);
-    } elseif ($length == 127) {
-        $masks = substr($payload, 10, 4);
-        $data = substr($payload, 14);
-    } else {
-        $masks = substr($payload, 2, 4);
-        $data = substr($payload, 6);
-    }
-
-    $text = '';
-    for ($i = 0; $i < strlen($data); ++$i) {
-        $text .= $data[$i] ^ $masks[$i % 4];
-    }
-    return $text;
-}
-
-function encodeMessage($msg) {
-    $b1 = 0x80 | (0x1 & 0x0f); // 0x1 text frame (FIN + opcode)
-    $length = strlen($msg);
-
-    if ($length <= 125) {
-        $header = pack('CC', $b1, $length);
-    } elseif ($length > 125 && $length < 65536) {
-        $header = pack('CCn', $b1, 126, $length);
-    } else {
-        $header = pack('CCNN', $b1, 127, $length);
-    }
-
-    return $header . $msg;
-}
-
-$chat = new Chat();
-
-$server = stream_socket_server("tcp://0.0.0.0:12346", $errno, $errstr);
-if (!$server) {
-    registrarNoLog("Erro ao abrir o servidor: $errstr ($errno)");
-    die();
-}
-
-registrarNoLog("Servidor em execução!");
-
-$clients = array($server);
-
-$timerIniciarPartidaLobby = 5;
 
 while (true) {
     $read = $clients;
