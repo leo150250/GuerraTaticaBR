@@ -26,6 +26,7 @@ const pLoader = document.getElementById("loader");
 const selectTerritorioMP = document.getElementById("selectTerritorioMP");
 const imagemJogadorMP = document.getElementById("imagemJogadorMP");
 const nomeJogadorMP = document.getElementById("nomeJogadorMP");
+const divTimerPlan = document.getElementById("timerPlan");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -65,6 +66,9 @@ var acelerar = false;
 var iteracoesPausa = 0;
 var numTurnos = 0;
 var autoRodar = false;
+var timerPlanejamento = 0;
+var tempoRestantePlan = 0;
+var intervalTimer= null;
 
 var multiplayer = false;
 var mp_servidor = "teste";
@@ -878,20 +882,22 @@ function* etapaTurno() {
 		}
 	}
 
-	acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
-
-	dataTurno.setMonth(dataTurno.getMonth() + 1);
-	pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
-	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	definirGameState(gameStates.STANDBY);
-	zoomMapa(0);
 	if (multiplayer) {
 		socket.send("\\ready");
-	}
-	atualizarQuantidadeDeAcoes();
-	clearInterval(intervalosTurnos);
-	if (autoRodar) {
-		rodarTurno();
+	} else {
+		acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
+
+		dataTurno.setMonth(dataTurno.getMonth() + 1);
+		pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
+		logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+		definirGameState(gameStates.STANDBY);
+		zoomMapa(0);
+		
+		atualizarQuantidadeDeAcoes();
+		clearInterval(intervalosTurnos);
+		if (autoRodar) {
+			rodarTurno();
+		}
 	}
 }
 function executarCPUs() {
@@ -1279,13 +1285,33 @@ function entrarSalaIP(servidor = mp_servidor) {
 					divTitulo.style.display = "none";
 					multiplayer = true;
 					definirJogador(mp_territorio);
+					divBarraInferior.innerHTML="";
+					logExecucao("Bem-vindo ao GuerraTaticaBR!");
+					console.log("Jogo pronto!");
 				}
+				if (gameState === gameStates.AGUARDAR) {
+					acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
+					
+					atualizarQuantidadeDeAcoes();
+					clearInterval(intervalosTurnos);
+					dataTurno.setFullYear(parseInt(jsonServidor.conteudo.data.substring(0,4)),parseInt(jsonServidor.conteudo.data.substring(5))-1);
+				}
+				tempoRestantePlan = timerPlanejamento;
+				divTimerPlan.innerHTML = tempoRestantePlan;
+				intervalTimer = setInterval(()=>{
+					if (tempoRestantePlan > 0) {
+						tempoRestantePlan--;
+					}
+					if (tempoRestantePlan <= 5) {
+						divTimerPlan.classList.add("timerAviso");
+					} else {
+						divTimerPlan.classList.remove("timerAviso");
+					}
+					divTimerPlan.innerHTML = tempoRestantePlan;
+				},1000);
 				definirGameState(gameStates.STANDBY);
-				divBarraInferior.innerHTML="";
-				logExecucao("Bem-vindo ao GuerraTaticaBR!");
 				pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
 				logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-				console.log("Jogo pronto!");
 				atualizarBarraStatus();
 				atualizarOverlayRanking();
 				divOverlayAviso.style.display = "none";
@@ -1294,6 +1320,8 @@ function entrarSalaIP(servidor = mp_servidor) {
 			}
 			case "acoes": {
 				acoes.forEach(acao => acao.apagar());
+				divTimerPlan.classList.remove("timerAviso");
+				divTimerPlan.innerHTML = "---";
 				jsonServidor.conteudo.forEach(acaoData => {
 					console.log(acaoData);
 					const origem = obterEstado(acaoData.origem);
@@ -1305,6 +1333,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 						new Acao(origem, tipo, destino, agua);
 					}
 				});
+				clearInterval(intervalTimer);
 				logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
 				definirGameState(gameStates.AGUARDAR);
 				etapasTurnos = etapaTurno();
@@ -1451,6 +1480,7 @@ function iniciarUmJogador() {
 	atualizarBarraStatus();
 	atualizarOverlayRanking();
 	divOverlayAviso.style.display = "none";
+	divTimerPlan.style.display = "none";
 	zoomMapa(0);
 }
 function iniciarMultijogador() {

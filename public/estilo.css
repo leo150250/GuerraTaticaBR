@@ -63,6 +63,28 @@ dialog {
 	background-repeat: no-repeat;
 	background-size: 100px;
 	outline: none;
+	animation: exibicaoDialog 0.5s ease-in-out forwards;
+}
+@keyframes exibicaoDialog {
+	0% {
+		width: 0px;
+	}
+	80% {
+		background-color: #0008;
+	}
+	85% {
+		background-color: #0F08;
+	}
+	90% {
+		width: calc(100% - 10rem);
+		background-color: #0008;
+	}
+	95% {
+		background-color: #0F08;
+	}
+	100% {
+		background-color: #0008;
+	}
 }
 dialog::backdrop {
 	-webkit-backdrop-filter: blur(2) contrast(0.25);
@@ -317,6 +339,7 @@ fieldset:has(#nomeJogadorMP) {
 	flex-grow: 0;
 	box-sizing: border-box;
 	height: calc(100% - 3rem - 10rem);
+	overflow: hidden;
 }
 #acoes #status {
 	display: flex;
@@ -422,4 +445,25 @@ fieldset:has(#nomeJogadorMP) {
 #listagemPartidas fieldset {
 	width: 100%;
 	height: 20em;
+}
+#timerPlan {
+	text-align: center;
+	font-size: 3em;
+	font-weight: bold;
+}
+#timerPlan.timerAviso {
+	animation: avisoTempoEsgotando 1s infinite;
+}
+@keyframes avisoTempoEsgotando {
+	0% {
+		color: #FFF;
+		transform: scale(2);
+	}
+	50% {
+		color: #F00;
+		transform: scale(1);
+	}
+	100% {
+		color: #FFF;
+	}
 }
