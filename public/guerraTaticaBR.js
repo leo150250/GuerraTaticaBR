@@ -72,6 +72,7 @@ var mp_porta = 12346
 var mp_id = 0;
 var socket = null;
 var mp_pronto = false;
+var mp_territorio = "";
 
 var gameState = gameStates.STANDBY;
 
@@ -518,7 +519,9 @@ function definirJogador(argJogador=null) {
 	}
 	if (jogador!=null) {
 		jogador.cpu = false;
-		jogador.usuario = "AAAAA";
+		if (!multiplayer) {
+			jogador.usuario = "AAAAA";
+		}
 		estadoJogador = obterEstado(jogador.id);
 		numAcoesMax = 1;
 		divBarraSuperior.style.borderColor = estadoJogador.cor;
@@ -682,19 +685,7 @@ function definirGameState(argGameState,argVoltar = false) {
 					divBotoesAcoes.classList.remove("cancelar");
 					new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado,ataquePorAgua);
 					if (multiplayer) {
-						let tipoAcao = "";
-						switch (tipo) {
-							case tiposAcoes.ATAQUE:
-								tipoAcao = "ATQ";
-								break;
-							case tiposAcoes.DEFESA:
-								tipoAcao = "DEF";
-								break;
-							case tiposAcoes.REFORCO:
-								tipoAcao = "REF";
-								break;
-						}
-						let mensagem = `\\action ${estadoSelecionadoAntes.id} ${tipoAcao} ${estadoSelecionado.id} ${ataquePorAgua}`;
+						let mensagem = `\\action ${estadoSelecionadoAntes.id} ${tipoAcao.toUpperCase()} ${estadoSelecionado.id} ${ataquePorAgua}`;
 						socket.send(mensagem);
 					}
 					estadoSelecionadoAntes.vizinhos.forEach(vizinho => {
@@ -813,6 +804,10 @@ function acaoReforcar() {
 	}
 	divBotoesAcoes.classList.remove("cancelar");
 	new Acao(estadoSelecionado,tiposAcoes.REFORCO);
+	if (multiplayer) {
+		let mensagem = `\\action ${estadoSelecionado.id} ${tiposAcoes.REFORCO.toUpperCase()}`;
+		socket.send(mensagem);
+	}
 	definirGameState(gameStates.STANDBY,true);
 }
 function acaoAtacar() {
@@ -849,15 +844,15 @@ function rodarTurno() {
 
 }
 function* etapaTurno() {
+	divListaAcoes.innerHTML = "";
 	if (!multiplayer) {
 		executarCPUs();
 
 		acoes = acoes.sort(() => Math.random() - 0.5);
-		divListaAcoes.innerHTML = "";
-		acoes.forEach(acao => {
-			divListaAcoes.appendChild(acao.el);
-		});
 	}
+	acoes.forEach(acao => {
+		divListaAcoes.appendChild(acao.el);
+	});
 
 	for (let i = 0; i < acoes.length; i++) {
 		if (acoes[i].executar()) {
@@ -890,6 +885,9 @@ function* etapaTurno() {
 	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
 	definirGameState(gameStates.STANDBY);
 	zoomMapa(0);
+	if (multiplayer) {
+		socket.send("\\ready");
+	}
 	atualizarQuantidadeDeAcoes();
 	clearInterval(intervalosTurnos);
 	if (autoRodar) {
@@ -1225,10 +1223,11 @@ function entrarSalaIP(servidor = mp_servidor) {
 
 						if (jogadorMP.usuario === mp_id) {
 							selectTerritorioMP.value = jogadorMP.id;
+							mp_territorio = jogadorMP.id;
 							imagemJogadorMP.src = "estrutura/" + jogadorMP.imagem;
 							imagemJogadorMP.title = jogadorMP.nome;
 							nomeJogadorMP.value = jogadorMP.nome;
-							definirJogador(jogadorMP.id);
+							definirJogador(mp_territorio);
 						}
 					}
 				}
@@ -1279,6 +1278,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 					dialogLobby.close();
 					divTitulo.style.display = "none";
 					multiplayer = true;
+					definirJogador(mp_territorio);
 				}
 				definirGameState(gameStates.STANDBY);
 				divBarraInferior.innerHTML="";
@@ -1292,8 +1292,10 @@ function entrarSalaIP(servidor = mp_servidor) {
 				zoomMapa(0);
 				break;
 			}
-			case "action": {
+			case "acoes": {
+				acoes.forEach(acao => acao.apagar());
 				jsonServidor.conteudo.forEach(acaoData => {
+					console.log(acaoData);
 					const origem = obterEstado(acaoData.origem);
 					const destino = acaoData.destino ? obterEstado(acaoData.destino) : null;
 					const tipo = Object.values(tiposAcoes).find(t => t === acaoData.tipo.toLowerCase());

@@ -7,9 +7,9 @@ enum TipoAcao: string {
 
     public function toString(): string {
         return match($this) {
-            self::ATAQUE => 'ATAQUE',
-            self::DEFESA => 'DEFESA',
-            self::REFORCO => 'REFORCO',
+            self::ATAQUE => 'atq',
+            self::DEFESA => 'def',
+            self::REFORCO => 'ref',
         };
     }
 }
@@ -376,9 +376,10 @@ class Chat {
                     }
                     if ($origem) {
                         criarAcao($origem, $tipo, $destino, $agua);
-                        $from->send(encodeMessage("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : "")));
+                        registrarNoLog("Ação criada: {$tipo->toString()} de {$origem->id}" . ($destino ? " para {$destino->id}" : ""));
                     } else {
-                        $from->send(encodeMessage("Estado não encontrado"));
+                        registrarNoLog("Falha ao criar ação: origem não encontrada");
+                        die();
                     }
                     break;
                 case 'ready':
@@ -578,7 +579,7 @@ function obterJogadorDeConexao($conn) {
     return null;
 }
 function iniciarPlanejamento() {
-    global $estadoPartida, $inicioPlanejamento, $chat, $dataTurno;
+    global $estadoPartida, $inicioPlanejamento, $chat, $dataTurno, $numJogadoresProntos;
     $estadoPartida = EstadoPartida::PLANEJAMENTO;
     $inicioPlanejamento = time();
     foreach ($chat->obterClientes() as $client) {
@@ -591,6 +592,7 @@ function iniciarPlanejamento() {
             ])));
         }
     }
+    $numJogadoresProntos = 0;
     registrarNoLog("Rodada de planejamento iniciada");
 }
 function obterTempoRestantePlanejamento() {
@@ -611,7 +613,7 @@ function iniciarExecucao() {
         if ($client instanceof Connection) {
             $client->send(encodeMessage(json_encode([
                 'tipo' => 'acoes',
-                'conteudo' => $jsonAcoes
+                'conteudo' => json_decode($jsonAcoes)
             ])));
         }
     }
@@ -632,10 +634,23 @@ function iniciarExecucao() {
 }
 function verificarEstadoPartida() {
     global $estadoPartida, $numJogadoresProntos, $jogadores, $timerIniciarPartidaLobby, $clients, $chat;
-    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && obterTempoRestantePlanejamento() <= 0) {
-        iniciarExecucao();
-    }
-    if ($estadoPartida === EstadoPartida::LOBBY) {
+    if ($estadoPartida === EstadoPartida::PLANEJAMENTO) {
+        $tempoRestante = obterTempoRestantePlanejamento();
+        if ($tempoRestante <= 5 && $tempoRestante > 0) {
+            registrarNoLog("Tempo restante para planejamento: {$tempoRestante} segundos");
+        }
+        if ($tempoRestante <= 0) {
+            iniciarExecucao();
+        }
+        $humanPlayers = array_filter($jogadores, function($jogador) {
+            return !$jogador->cpu;
+        });
+        $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
+        if ($remainingPlayers === 0) {
+            registrarNoLog("Todos os jogadores prontos");
+            iniciarExecucao();
+        }
+    } elseif ($estadoPartida === EstadoPartida::LOBBY) {
         $humanPlayers = array_filter($jogadores, function($jogador) {
             return !$jogador->cpu;
         });
@@ -952,13 +967,6 @@ while (true) {
     }
 
     verificarEstadoPartida();
-    $tempoRestante = obterTempoRestantePlanejamento();
-    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && $tempoRestante <= 5 && $tempoRestante > 0) {
-        registrarNoLog("Tempo restante para planejamento: {$tempoRestante} segundos");
-    }
-    if ($estadoPartida === EstadoPartida::PLANEJAMENTO && $tempoRestante <= 0) {
-        iniciarExecucao();
-    }
     sleep(1);
 }
 
