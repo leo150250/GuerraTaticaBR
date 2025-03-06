@@ -52,7 +52,7 @@ dialog {
 	background-color: #0008;
 	color: #FFF;
 	text-align: center;
-	border: 1px solid #8888;
+	border: 1px solid #0808;
 	border-radius: 10px;
 	box-shadow: 0px 5px 10px #0008;
 	z-index: 101;
@@ -69,18 +69,18 @@ dialog {
 	0% {
 		width: 0px;
 	}
-	80% {
+	75% {
 		background-color: #0008;
 	}
-	85% {
-		background-color: #0F08;
+	80% {
+		background-color: #0808;
 	}
 	90% {
 		width: calc(100% - 10rem);
 		background-color: #0008;
 	}
 	95% {
-		background-color: #0F08;
+		background-color: #0808;
 	}
 	100% {
 		background-color: #0008;
@@ -421,6 +421,22 @@ fieldset:has(#nomeJogadorMP) {
 	background-color: #EEE;
 	border-color: #DDD;
 	color: #888;
+}
+#botaoRodarTurno.destaque {
+	outline: 2px solid #FFF;
+	animation: 1s ease-in-out destaqueBotaoTurno infinite;
+}
+@keyframes destaqueBotaoTurno {
+	0% {
+		background-color: #178511;
+	}
+	50% {
+		outline-offset: 0.5em;
+		background-color: #25b81d;
+	}
+	100% {
+		background-color: #178511;
+	}
 }
 #listaTerritoriosJogadores {
 	display: flex;

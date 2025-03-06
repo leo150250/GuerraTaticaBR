@@ -121,6 +121,27 @@
 			<button onclick="sairSala()">Sair da sala</button>
 		</div>
 	</dialog>
+	<dialog id="dialogConfirmacao">
+		<p id="textoConfirmacao"></p>
+		<div class="menuHorizontal">
+			<button onclick="confirmarAcao()">Sim</button>
+			<button onclick="cancelarAcao()">Não</button>
+		</div>
+	</dialog>
+	<dialog id="dialogPrompt">
+		<p id="textoPrompt"></p>
+		<input type="text" id="inputPrompt">
+		<div class="menuHorizontal">
+			<button onclick="confirmarPrompt()">OK</button>
+			<button onclick="cancelarPrompt()">Cancelar</button>
+		</div>
+	</dialog>
+	<dialog id="dialogAlerta">
+		<p id="textoAlerta"></p>
+		<div class="menuHorizontal">
+			<button onclick="fecharAlerta()">OK</button>
+		</div>
+	</dialog>
 	<script src="md5.min.js"></script>
 	<script src="guerraTaticaBR.js"></script>
 </body>
