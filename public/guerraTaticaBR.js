@@ -1376,6 +1376,10 @@ function entrarSalaIP(servidor = mp_servidor) {
 					}
 					divTimerPlan.innerHTML = tempoRestantePlan;
 				},1000);
+				if (jsonServidor.conteudo.hash !== obterHashEstados()) {
+					socket.send("\\updateEstados");
+					return;
+				}
 				definirGameState(gameStates.STANDBY);
 				pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
 				logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
@@ -1389,6 +1393,9 @@ function entrarSalaIP(servidor = mp_servidor) {
 				acoes.forEach(acao => acao.apagar());
 				divTimerPlan.classList.remove("timerAviso");
 				divTimerPlan.innerHTML = "---";
+				cancelarAcao();
+				cancelarPrompt();
+				fecharAlerta();
 				jsonServidor.conteudo.forEach(acaoData => {
 					console.log(acaoData);
 					const origem = obterEstado(acaoData.origem);
@@ -1409,6 +1416,17 @@ function entrarSalaIP(servidor = mp_servidor) {
 				intervalosTurnos = setInterval(()=>{
 					etapasTurnos.next();
 				}, tempoTurnos);
+				break;
+			}
+			case "update": {
+				jsonServidor.conteudo.forEach(estadoData => {
+					const estado = obterEstado(estadoData.id);
+					if (estado) {
+						estado.vida = estadoData.vida;
+						estado.controlador = obterJogador(estadoData.controlador);
+						estado.atualizarSVG();
+					}
+				});
 				break;
 			}
 		}

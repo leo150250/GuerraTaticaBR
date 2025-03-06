@@ -313,8 +313,11 @@ class Chat {
                     break;
                 case 'updateEstados':
                     $jsonEstados = obterJSONEstados();
-                    $from->send(encodeMessage($jsonEstados));
-                    registrarNoLog(encodeMessage($jsonEstados));
+                    $from->send(encodeMessage(json_encode([
+                        'tipo' => 'update',
+                        'conteudo' => $jsonEstados])
+                    ));
+                    registrarNoLog("Jogador {$from->resourceId} solicitou atualização dos estados");
                     break;
                 case 'nextTurn':
                     avancarDataRodada();
@@ -588,6 +591,7 @@ function iniciarPlanejamento() {
                 "tipo" => "plan",
                 "conteudo" => [
                     'data' => $dataTurno->format('Y-m'),
+                    'hash' => obterHashEstados(),
                 ]
             ])));
         }
