@@ -14,14 +14,16 @@
 	</div>
 	<div id="wrapper">
 		<div id="barraSuperior" class="barra">
+			<img src="estrutura/GuerraTaticaBR.svg" title="Guerra Tática BR" class="logo">
 			<div id="cabecalhoJogador">
 				<img src="#" title="Jogador" id="imagemJogador">
 				<p id="pJogador">Guerra Tática BR</p>
 			</div>
-			<img src="estrutura/GuerraTaticaBR.svg" title="Guerra Tática BR" class="logo">
+			<hr>
 			<p id="turno">
 				Turno
 			</p>
+			<button title="Configurações" onclick="abrirConfiguracoes()">⚙️</button>
 		</div>
 		<div id="mapa">
 			<object id="mapaSVG" type="image/svg+xml" data="estrutura/brazil.svg"></object>
@@ -50,12 +52,17 @@
 	<dialog id="dialogEscolhaJogador">
 		<p>Escolha seu território</p>
 		<div id="listaTerritoriosJogadores"></div>
+		<div class="menuVertical">
+			<button onclick="voltarMenuPrincipal()">Voltar</button>
+		</div>
 	</dialog>
 	<dialog id="dialogPrincipal">
 		<p>Menu Principal</p>
 		<div class="menuVertical">
-			<button onclick="iniciarUmJogador()">Um jogador</button>
+			<button onclick="exibirUmJogador()">Um jogador</button>
 			<button onclick="iniciarMultijogador()">Multijogador</button>
+			<button onclick="abrirConfiguracoes()">Configurações</button>
+			<hr>
 			<button onclick="window.location.href='https://github.com/leo150250/GuerraTaticaBR'">Projeto no GitHub</button>
 			<button onclick="window.location.href='https://leandrogabriel.net/'">LeandroGabriel.net</button>
 		</div>
@@ -140,6 +147,28 @@
 		<p id="textoAlerta"></p>
 		<div class="menuHorizontal">
 			<button onclick="fecharAlerta()">OK</button>
+		</div>
+	</dialog>
+	<dialog id="dialogConfiguracoes">
+		<p>Configurações de Som</p>
+		<p>
+			<label for="sonsVolume">Sons:</label>
+			<input type="checkbox" id="sonsVolume" checked>
+		</p>
+		<p>
+			<label for="musicaVolume">Música:</label>
+			<input type="checkbox" id="musicaVolume" checked>
+		</p>
+		<p>
+			<label for="alertasSonoros">Alertas Sonoros:</label>
+			<input type="checkbox" id="alertasSonoros" checked title="Alertas sonoros são emitidos sempre que um evento importante que requer sua atenção ocorrer, por exemplo, alerta de que um novo turno começou">
+		</p>
+		<p>
+			<label for="alertasNavegador">Alertas de Navegador:</label>
+			<input type="checkbox" id="alertasNavegador" checked title="Caso a aba do jogo esteja desfocada, a aba do jogo será destacada quando um evento importante que requer sua atenção ocorrer">
+		</p>
+		<div class="menuHorizontal">
+			<button onclick="fecharConfiguracoes()">Voltar</button>
 		</div>
 	</dialog>
 	<script src="md5.min.js"></script>

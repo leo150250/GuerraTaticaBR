@@ -34,6 +34,11 @@ const pTextoPrompt = document.getElementById("textoPrompt");
 const inputPrompt = document.getElementById('inputPrompt');
 const dialogAlerta = document.getElementById("dialogAlerta");
 const pTextoAlerta = document.getElementById("textoAlerta");
+const dialogConfiguracoes = document.getElementById("dialogConfiguracoes");
+const sonsVolume = document.getElementById("sonsVolume");
+const musicaVolume = document.getElementById("musicaVolume");
+const alertasSonoros = document.getElementById("alertasSonoros");
+const alertasNavegador = document.getElementById("alertasNavegador");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -366,6 +371,7 @@ class Jogador {
 		this.botaoEscolhaJogador = document.createElement("button");
 		this.botaoEscolhaJogador.onclick = (e)=>{
 			definirJogador(this.id);
+			iniciarUmJogador();
 			dialogEscolhaJogador.close();
 		}
 		this.imagemEscolhaJogador = document.createElement("img")
@@ -421,6 +427,9 @@ async function iniciarEstados() {
 		{"id": "SP", "svgId": "BR-SP", "nome": "São Paulo", "corMatiz": 224, "corSaturacao": 100, "vizinhos": ["PR", "MS", "MG", "RJ"], "acessoAgua": true},
 		{"id": "TO", "svgId": "BR-TO", "nome": "Tocantins", "corMatiz": 256, "corSaturacao": 100, "vizinhos": ["GO", "MT", "PA", "MA", "PI", "BA"], "acessoAgua": false}
 	];
+	jogadores = [];
+	estados = [];
+	divListaTerritoriosJogadores.innerHTML = "";
 	estrutura.forEach(estadoData => {
 		let jogador = new Jogador(estadoData.id, estadoData.nome, estadoData.svgId, estadoData.corMatiz, estadoData.corSaturacao);
 	});
@@ -546,6 +555,9 @@ async function definirGameState(argGameState,argVoltar = false) {
                     }
                 } else {
                     let ataquePorAgua = false;
+					if (estadoSelecionadoAntes === estadoSelecionado) {
+						return;
+					}
                     if (!estadoSelecionadoAntes.vizinhos.includes(estadoSelecionado)) {
                         if (gameState == gameStates.ATACARESTADO && estadoSelecionadoAntes.acessoAgua && estadoSelecionado.acessoAgua) {
                             ataquePorAgua = true;
@@ -595,6 +607,7 @@ async function definirGameState(argGameState,argVoltar = false) {
                         vizinho.svg.classList.remove("atacar");
                         vizinho.svg.classList.remove("murar");
                     });
+                    estadoSelecionado = estadoSelecionadoAntes;
                     if (estadoSelecionado.acessoAgua) {
                         estados.forEach(estado => {
                             if (estado.acessoAgua) {
@@ -602,7 +615,6 @@ async function definirGameState(argGameState,argVoltar = false) {
                             }
                         });
                     }
-                    estadoSelecionado = estadoSelecionadoAntes;
                     definirGameState(gameStates.STANDBY,true);
                     return;
                 }
@@ -693,7 +705,6 @@ async function definirGameState(argGameState,argVoltar = false) {
     }
     gameState = argGameState;
 }
-
 async function rodarTurno() {
     if (numAcoesMax - numAcoes > 0) {
         const proceed = await customConfirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
@@ -1214,6 +1225,19 @@ function exibirSumarioPartida() {
 
 	return divSumario;
 }
+function abrirConfiguracoes() {
+	if (jogador === null) {
+		dialogPrincipal.close();
+	}
+	dialogConfiguracoes.showModal();
+}
+function fecharConfiguracoes() {
+	dialogConfiguracoes.close();
+	if (jogador === null) {
+		dialogPrincipal.showModal();
+	}
+	
+}
 //#endregion
 
 
@@ -1257,6 +1281,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 	socket = new WebSocket(url);
 
 	socket.onopen = function() {
+		dialogMultijogador.close();
 		exibirLobby();
 	};
 
@@ -1433,11 +1458,14 @@ function entrarSalaIP(servidor = mp_servidor) {
 	};
 
 	socket.onerror = function(error) {
-		alert('Erro: ' + error.message);
+		customAlert("Erro: " + error.message);
 	};
 
-	socket.onclose = function() {
-		console.log("Sala fechada");
+	socket.onclose = async function() {
+		dialogLobby.close();
+		dialogMultijogador.close();
+		await customAlert("A sala foi encerrada.");
+		voltarMenuPrincipal();
 	};
 }
 function exibirLobby() {
@@ -1537,10 +1565,12 @@ function mpEstouPronto() {
 	nomeJogadorMP.disabled = mp_pronto;
 }
 function voltarMenuPrincipal() {
-	dialogLobby.close();
-	dialogMultijogador.close();
 	dialogEscolhaJogador.close();
+	dialogMultijogador.close();
+	dialogLobby.close();
+	dialogConfiguracoes.close();
 	dialogPrincipal.showModal();
+	divTitulo.style.display = null;
 	iniciarEstados();
 }
 //#endregion
@@ -1559,9 +1589,11 @@ async function inicializar() {
 	//rodarTurno();
 	//exibirOverlayJogadorPerdeu();
 }
-function iniciarUmJogador() {
+function exibirUmJogador() {
 	dialogPrincipal.close();
 	dialogEscolhaJogador.showModal();
+}
+function iniciarUmJogador() {
 	console.log("Inicializando...");
 	inicializado = true;
 	
@@ -1581,6 +1613,7 @@ function iniciarMultijogador() {
 	dialogPrincipal.close();
 	dialogMultijogador.showModal();
 }
+
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{
 	if (svgMapaObject.contentDocument.readyState === 'complete' && !inicializado) {

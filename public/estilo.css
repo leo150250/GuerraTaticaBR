@@ -1,5 +1,6 @@
 :root {
 	--agua: #aaccff;
+	interpolate-size: allow-keywords;
 }
 body {
 	width: 100vw;
@@ -47,7 +48,7 @@ button:disabled, a:disabled {
 	cursor: not-allowed;
 }
 dialog {
-	width: calc(100% - 10rem);
+	max-width: calc(100% - 10rem);
 	max-height: calc(100% - 10rem);
 	background-color: #0008;
 	color: #FFF;
@@ -67,7 +68,9 @@ dialog {
 }
 @keyframes exibicaoDialog {
 	0% {
+		overflow: hidden;
 		width: 0px;
+		height: 0px;
 	}
 	75% {
 		background-color: #0008;
@@ -76,7 +79,8 @@ dialog {
 		background-color: #0808;
 	}
 	90% {
-		width: calc(100% - 10rem);
+		width: fit-content;
+		height: fit-content;
 		background-color: #0008;
 	}
 	95% {
@@ -84,6 +88,7 @@ dialog {
 	}
 	100% {
 		background-color: #0008;
+		overflow: auto;
 	}
 }
 dialog::backdrop {
@@ -203,13 +208,16 @@ fieldset:has(#nomeJogadorMP) {
 	width: 100%;
 	box-sizing: border-box;
 }
+.barra hr {
+	flex-grow: 2;
+	border: 1px outset #8884;
+}
 #barraSuperior {
 	border-bottom-width: 2px;
 	border-bottom-style: ridge;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	justify-content: space-between;
 	height: 3rem;
 	top: 0px;
 }
@@ -432,7 +440,8 @@ fieldset:has(#nomeJogadorMP) {
 	}
 	50% {
 		outline-offset: 0.5em;
-		background-color: #25b81d;
+		color: #178511;
+		background-color: #FFF;
 	}
 	100% {
 		background-color: #178511;
