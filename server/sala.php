@@ -486,7 +486,16 @@ $estadoPartida = EstadoPartida::LOBBY;
 $tempoPlanejamento = 30; // segundos
 $inicioPlanejamento = null;
 $chat = new Chat();
-$server = stream_socket_server("tcp://0.0.0.0:12346", $errno, $errstr);
+$context = stream_context_create([
+    'ssl' => [
+        'local_cert' => '/path/to/your/cert.pem',
+        'local_pk' => '/path/to/your/key.pem',
+        'allow_self_signed' => true,
+        'verify_peer' => false
+    ]
+]);
+
+$server = stream_socket_server("tcp://0.0.0.0:12346", $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 if (!$server) {
     registrarNoLog("Erro ao abrir o servidor: $errstr ($errno)");
     die();
@@ -738,17 +747,24 @@ function perform_handshaking($received_header, $client_conn, $host, $port) {
         }
     }
 
+    if (!isset($headers['Sec-WebSocket-Key'])) {
+        return;
+    }
     $secKey = $headers['Sec-WebSocket-Key'];
     $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? 'wss' : 'ws';
+    $location = "{$protocol}://$host:$port";
 
     $upgrade = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
                "Upgrade: websocket\r\n" .
                "Connection: Upgrade\r\n" .
-               "WebSocket-Origin: $host\r\n" .
-               "WebSocket-Location: ws://$host:$port\r\n" .
-               "Sec-WebSocket-Accept:$secAccept\r\n\r\n";
+               "Sec-WebSocket-Accept: $secAccept\r\n" .
+               "Sec-WebSocket-Protocol: $protocol\r\n" .
+               "Sec-WebSocket-Version: 13\r\n\r\n";
     fwrite($client_conn, $upgrade);
 }
+
 function unmask($payload) {
     $length = ord($payload[1]) & 127;
 
@@ -769,6 +785,7 @@ function unmask($payload) {
     }
     return $text;
 }
+
 function encodeMessage($msg) {
     $b1 = 0x80 | (0x1 & 0x0f); // 0x1 text frame (FIN + opcode)
     $length = strlen($msg);

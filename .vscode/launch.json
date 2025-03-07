@@ -5,10 +5,20 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Listen for Xdebug",
+			"name": "Executar sala",
 			"type": "php",
 			"request": "launch",
-			"port": 9003
+			"program": "${workspaceFolder}/server/sala.php",
+			"cwd": "${workspaceFolder}",
+			"port": 12346,
+			"runtimeArgs": [
+				"-dxdebug.mode=debug",
+				"-dxdebug.start_with_request=yes"
+			],
+			"env": {
+				"XDEBUG_MODE": "debug,develop",
+				"XDEBUG_CONFIG": "client_port=${port}"
+			}
 		},
 		{
 			"name": "Launch currently open script",
