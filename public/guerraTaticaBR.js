@@ -122,6 +122,9 @@ class Estado {
 		this.imagem = this.controlador.imagem;
 		this.svg = svgMapa.getElementById(svgId);
 		this.atualizarSVG();
+		this.svg.addEventListener('mouseenter', () => {
+			tocarSom('somBotao');
+		})
 		this.svg.addEventListener('mouseover', () => {
             this.svg.style.cursor = 'pointer';
         });
@@ -248,6 +251,7 @@ class Acao {
 						this.origem.atualizarSVG();
 					} else {
 						setTimeout((e)=>{
+							tocarSom('somReforco');
 							this.origem.atualizarSVG();
 						},1100);
 					}
@@ -267,6 +271,9 @@ class Acao {
 							if (this.acelerar) {
 								this.destino.atualizarSVG();
 							} else {
+								setTimeout((e)=>{
+									tocarSom('somAtaque');
+								},500);
 								setTimeout((e)=>{
 									this.destino.atualizarSVG();
 								},1100);
@@ -294,6 +301,9 @@ class Acao {
 						(muro.estado1 === this.origem && muro.estado2 === this.destino) || 
 						(muro.estado1 === this.destino && muro.estado2 === this.origem))) {
 							new Muro(this.origem, this.destino);
+							setTimeout((e)=>{
+								tocarSom('somMuro');
+							},500);					
 							logExecucao("O território de " + this.origem.nome + " criou um muro na fronteira com " + this.destino.nome, this.origem.controlador);
 					}
 				} break;
@@ -380,6 +390,8 @@ class Jogador {
 		this.nomeEscolhaJogador.innerHTML = this.nomeEstado;
 		this.botaoEscolhaJogador.appendChild(this.imagemEscolhaJogador);
 		this.botaoEscolhaJogador.appendChild(this.nomeEscolhaJogador);
+		this.botaoEscolhaJogador.addEventListener('mouseenter', () => tocarSom('somBotao'));
+		this.botaoEscolhaJogador.addEventListener('click', () => tocarSom('somBotaoAplicar'));
 		divListaTerritoriosJogadores.appendChild(this.botaoEscolhaJogador);
 
 		this.divJogadorLobby = null;
@@ -519,6 +531,7 @@ function clicarEstado(argEstado) {
 		}
 		estadoSelecionadoAntes = estadoSelecionado;
 		estadoSelecionado = argEstado;
+		tocarSom('somBotaoAplicar');
 		definirGameState(gameStates.ESTADOSELECIONADO);
 	}
 }
@@ -1101,6 +1114,8 @@ function exibirOverlayDerrota(argJogador) {
 	const h1 = document.createElement("h1");
 	h1.innerHTML = `${argJogador.nome} foi derrotado!`;
 
+	tocarSom("somJogadorDerrotado");
+
 	const img = document.createElement("img");
 	img.style.height = "100px";
 	img.src = "estrutura/" + argJogador.imagem;
@@ -1138,6 +1153,8 @@ function exibirOverlayJogadorPerdeu() {
 
 	const h1 = document.createElement("h1");
 	h1.innerHTML = "Você foi derrotado!";
+
+	tocarSom("somFimDerrota");
 
 	const sumario = exibirSumarioPartida();
 
@@ -1180,6 +1197,8 @@ function exibirOverlayVencedor() {
 
 	const h1 = document.createElement("h1");
 	h1.innerHTML = `${vencedor.nome} venceu a partida!`;
+
+	tocarSom("somFimVitoria");
 
 	const img = document.createElement("img");
 	img.style.height = "100px";
@@ -1238,6 +1257,27 @@ function fecharConfiguracoes() {
 	}
 	
 }
+function tocarSom(idSom) {
+    if (sonsVolume.checked) {
+		const som = document.getElementById(idSom);
+		if (som) {
+			som.currentTime = 0;
+			som.play();
+		}
+    }
+}
+document.querySelectorAll('button').forEach(button => {
+	button.addEventListener('mouseenter', () => {
+		if (!button.disabled) {
+			tocarSom('somBotao');
+		}
+	});
+	button.addEventListener('click', () => {
+		if (!button.disabled) {
+			tocarSom('somBotaoAplicar');
+		}
+	});
+});
 //#endregion
 
 
@@ -1395,6 +1435,7 @@ function entrarSalaIP(servidor = mp_servidor) {
 						tempoRestantePlan--;
 					}
 					if (tempoRestantePlan <= 5) {
+						tocarSom("somTimer");
 						divTimerPlan.classList.add("timerAviso");
 					} else {
 						divTimerPlan.classList.remove("timerAviso");
@@ -1434,6 +1475,9 @@ function entrarSalaIP(servidor = mp_servidor) {
 				});
 				clearInterval(intervalTimer);
 				logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+				if (gameState !== gameStates.AGUARDAR) {
+					tocarSom("somTimerAcabou");
+				}
 				definirGameState(gameStates.AGUARDAR);
 				etapasTurnos = etapaTurno();
 				exibirOverlayInicio();
