@@ -15,11 +15,30 @@ const pturno = document.getElementById("turno");
 const botaoRodarTurno = document.getElementById("botaoRodarTurno");
 const divListaTerritoriosJogadores = document.getElementById("listaTerritoriosJogadores");
 const dialogEscolhaJogador = document.getElementById("dialogEscolhaJogador");
+const dialogMultijogador = document.getElementById("dialogMultijogador");
+const dialogLobby = document.getElementById("dialogLobby");
+const dialogPrincipal = document.getElementById("dialogPrincipal");
 const divOverlayMapa = document.getElementById("overlayMapa");
 const divOverlayRanking = document.getElementById("overlayRanking");
 const divOverlayAviso = document.getElementById("overlayAviso");
 const divTitulo = document.getElementById("titulo");
 const pLoader = document.getElementById("loader");
+const selectTerritorioMP = document.getElementById("selectTerritorioMP");
+const imagemJogadorMP = document.getElementById("imagemJogadorMP");
+const nomeJogadorMP = document.getElementById("nomeJogadorMP");
+const divTimerPlan = document.getElementById("timerPlan");
+const dialogConfirmacao = document.getElementById("dialogConfirmacao");
+const pTextoConfirmacao = document.getElementById("textoConfirmacao");
+const dialogPrompt = document.getElementById("dialogPrompt");
+const pTextoPrompt = document.getElementById("textoPrompt");
+const inputPrompt = document.getElementById('inputPrompt');
+const dialogAlerta = document.getElementById("dialogAlerta");
+const pTextoAlerta = document.getElementById("textoAlerta");
+const dialogConfiguracoes = document.getElementById("dialogConfiguracoes");
+const sonsVolume = document.getElementById("sonsVolume");
+const musicaVolume = document.getElementById("musicaVolume");
+const alertasSonoros = document.getElementById("alertasSonoros");
+const alertasNavegador = document.getElementById("alertasNavegador");
 
 const gameStates = {
 	STANDBY: "STANDBY",
@@ -27,6 +46,7 @@ const gameStates = {
 	ATACARESTADO: "ATACARESTADO",
 	CONSTRUIRMURO: "CONSTRUIRMURO",
 	AGUARDAR: "AGUARDAR",
+	LOBBY: "LOBBY",
 }
 const tiposAcoes = {
 	ATAQUE: "atq",
@@ -58,11 +78,21 @@ var acelerar = false;
 var iteracoesPausa = 0;
 var numTurnos = 0;
 var autoRodar = false;
+var timerPlanejamento = 0;
+var tempoRestantePlan = 0;
+var intervalTimer= null;
+
+var multiplayer = false;
+var mp_servidor = "teste";
+var mp_porta = 12346
+var mp_id = 0;
+var socket = null;
+var mp_pronto = false;
+var mp_territorio = "";
 
 var gameState = gameStates.STANDBY;
 
 var svgMapa = null;
-
 svgMapaObject.onload = (e)=>{
 	if (!inicializado) {
 		console.log("Mapa pronto");
@@ -92,6 +122,9 @@ class Estado {
 		this.imagem = this.controlador.imagem;
 		this.svg = svgMapa.getElementById(svgId);
 		this.atualizarSVG();
+		this.svg.addEventListener('mouseenter', () => {
+			tocarSom('somBotao');
+		})
 		this.svg.addEventListener('mouseover', () => {
             this.svg.style.cursor = 'pointer';
         });
@@ -218,6 +251,7 @@ class Acao {
 						this.origem.atualizarSVG();
 					} else {
 						setTimeout((e)=>{
+							tocarSom('somReforco');
 							this.origem.atualizarSVG();
 						},1100);
 					}
@@ -237,6 +271,9 @@ class Acao {
 							if (this.acelerar) {
 								this.destino.atualizarSVG();
 							} else {
+								setTimeout((e)=>{
+									tocarSom('somAtaque');
+								},500);
 								setTimeout((e)=>{
 									this.destino.atualizarSVG();
 								},1100);
@@ -264,6 +301,9 @@ class Acao {
 						(muro.estado1 === this.origem && muro.estado2 === this.destino) || 
 						(muro.estado1 === this.destino && muro.estado2 === this.origem))) {
 							new Muro(this.origem, this.destino);
+							setTimeout((e)=>{
+								tocarSom('somMuro');
+							},500);					
 							logExecucao("O território de " + this.origem.nome + " criou um muro na fronteira com " + this.destino.nome, this.origem.controlador);
 					}
 				} break;
@@ -324,6 +364,7 @@ class Jogador {
 	constructor(argId,argNome,argSVGId,argCorMatiz,argCorSaturacao,argUsuario = null) {
 		this.id = argId;
 		this.nome = argNome;
+		this.nomeEstado = argNome;
 		this.svgId = argSVGId;
 		this.imagem = this.svgId + ".svg";
 		this.usuario = argUsuario;
@@ -340,15 +381,20 @@ class Jogador {
 		this.botaoEscolhaJogador = document.createElement("button");
 		this.botaoEscolhaJogador.onclick = (e)=>{
 			definirJogador(this.id);
+			iniciarUmJogador();
 			dialogEscolhaJogador.close();
 		}
 		this.imagemEscolhaJogador = document.createElement("img")
 		this.imagemEscolhaJogador.src = "estrutura/" + this.svgId + ".svg";
 		this.nomeEscolhaJogador = document.createElement("p");
-		this.nomeEscolhaJogador.innerHTML = this.nome;
+		this.nomeEscolhaJogador.innerHTML = this.nomeEstado;
 		this.botaoEscolhaJogador.appendChild(this.imagemEscolhaJogador);
 		this.botaoEscolhaJogador.appendChild(this.nomeEscolhaJogador);
+		this.botaoEscolhaJogador.addEventListener('mouseenter', () => tocarSom('somBotao'));
+		this.botaoEscolhaJogador.addEventListener('click', () => tocarSom('somBotaoAplicar'));
 		divListaTerritoriosJogadores.appendChild(this.botaoEscolhaJogador);
+
+		this.divJogadorLobby = null;
 	}
 	perder() {
 		acoes.filter(acao => acao.controlador === this).forEach(acao => acao.invalidar());
@@ -362,60 +408,7 @@ class Jogador {
 
 
 
-//#region Funções
-function moverMapa(argX,argY,argRelativo = true) {
-	if (argRelativo) {
-		mapaPosX += argX;
-		mapaPosY += argY;
-	} else {
-		mapaPosX = argX;
-		mapaPosY = argY;
-	}
-	svgMapaObject.style.left = mapaPosX + "px";
-	svgMapaObject.style.top = mapaPosY + "px";
-}
-function zoomMapa(argZoom = 0) {
-	if (argZoom === -0) {
-		let mapaWidth = svgMapaObject.clientWidth;
-		let mapaHeight = svgMapaObject.clientHeight;
-		let parentWidth = divMapa.clientWidth;
-		let parentHeight = divMapa.clientHeight;
-		let scaleX = parentWidth / mapaWidth;
-		let scaleY = parentHeight / mapaHeight;
-
-		let novoZoom = Math.min(scaleX, scaleY);
-		mapaEscala = novoZoom;
-		let posX = ((mapaWidth * novoZoom) / 2) - (divMapa.clientWidth / 2);
-		let posY = ((mapaHeight * novoZoom) / 2) - (divMapa.clientHeight / 2);;
-		moverMapa(-posX, -posY, false);
-	} else {
-		mapaEscala = argZoom;
-	}
-	svgMapaObject.style.transform = `scale(${mapaEscala}) rotateX(${mapaRotX}deg)`;
-}
-function focarEstado(argEstado) {
-	if (!acelerar) {
-		let estadoBBox = argEstado.svg.getBBox();
-		let mapaBBox = svgMapa.getBBox();
-		let estadoBBoxN = {
-			x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
-			y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
-			width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
-			height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
-		};
-		let scaleX = divMapa.clientWidth / estadoBBoxN.width;
-		let scaleY = divMapa.clientHeight / estadoBBoxN.height;
-		let novoZoom = Math.min(scaleX, scaleY);
-		if (novoZoom > 2) {
-			novoZoom = 2;
-		}
-		zoomMapa(novoZoom);
-		let posX = (estadoBBoxN.x * novoZoom) + ((estadoBBoxN.width * novoZoom) / 2) - (divMapa.clientWidth / 2);
-		let posY = (estadoBBoxN.y * novoZoom) + ((estadoBBoxN.height * novoZoom) / 2) - (divMapa.clientHeight / 2);;
-		//console.log(posX);
-		moverMapa(-posX, -posY, false);
-	}
-}
+//#region Funções do jogo
 async function iniciarEstados() {
 	const estrutura = [
 		{"id": "AC", "svgId": "BR-AC", "nome": "Acre", "corMatiz": 144, "corSaturacao": 50, "vizinhos": ["RO", "AM"], "acessoAgua": false},
@@ -446,6 +439,9 @@ async function iniciarEstados() {
 		{"id": "SP", "svgId": "BR-SP", "nome": "São Paulo", "corMatiz": 224, "corSaturacao": 100, "vizinhos": ["PR", "MS", "MG", "RJ"], "acessoAgua": true},
 		{"id": "TO", "svgId": "BR-TO", "nome": "Tocantins", "corMatiz": 256, "corSaturacao": 100, "vizinhos": ["GO", "MT", "PA", "MA", "PI", "BA"], "acessoAgua": false}
 	];
+	jogadores = [];
+	estados = [];
+	divListaTerritoriosJogadores.innerHTML = "";
 	estrutura.forEach(estadoData => {
 		let jogador = new Jogador(estadoData.id, estadoData.nome, estadoData.svgId, estadoData.corMatiz, estadoData.corSaturacao);
 	});
@@ -497,10 +493,14 @@ function obterJogador(argSigla) {
 }
 function definirJogador(argJogador=null) {
 	jogador = obterJogador(argJogador);
-	divTitulo.style.display = "none";
+	if (gameState != gameStates.LOBBY) {
+		divTitulo.style.display = "none";
+	}
 	if (jogador!=null) {
 		jogador.cpu = false;
-		jogador.usuario = "AAAAA";
+		if (!multiplayer) {
+			jogador.usuario = "AAAAA";
+		}
 		estadoJogador = obterEstado(jogador.id);
 		numAcoesMax = 1;
 		divBarraSuperior.style.borderColor = estadoJogador.cor;
@@ -515,64 +515,11 @@ function definirJogador(argJogador=null) {
 		atualizarQuantidadeDeAcoes();
 
 		logExecucao("Você está jogando como: " + estadoJogador.nome + " (" + estadoJogador.id + ")");
+		//console.log(obterJSONEstados());
+		//console.log(obterHashEstados());
 	} else {
 		numAcoesMax = 0;
 	}
-}
-function atualizarBarraStatus() {
-	if (jogador == null) {
-		imagemJogador.style.display = "none";
-		pJogador.innerHTML = "Guerra Tática BR";
-	} else {
-		imagemJogador.style.display = null;
-		imagemJogador.src = "estrutura/" + jogador.imagem;
-		imagemJogador.classList.add("bandeira");
-		let texto = "";
-		const estadosControlados = estados.filter(estado => estado.controlador === jogador).length;
-		const vidaTotal = estados.filter(estado => estado.controlador === jogador)
-									.reduce((total, estado) => total + estado.vida, 0);
-		texto += `${estadoJogador.nome} | Estados controlados: ${estadosControlados} (${vidaTotal})`;
-		pJogador.innerHTML = texto;
-	}
-}
-function hslToHex(h,s,l,debug=false) {
-	// Must be fractions of 1
-	s /= 100;
-	l /= 100;
-
-	let c = (1 - Math.abs(2 * l - 1)) * s,
-		x = c * (1 - Math.abs((h / 60) % 2 - 1)),
-		m = l - c/2,
-		r = 0,
-		g = 0,
-		b = 0;
-  
-	if (0 <= h && h < 60) {
-	  r = c; g = x; b = 0;  
-	} else if (60 <= h && h < 120) {
-	  r = x; g = c; b = 0;
-	} else if (120 <= h && h < 180) {
-	  r = 0; g = c; b = x;
-	} else if (180 <= h && h < 240) {
-	  r = 0; g = x; b = c;
-	} else if (240 <= h && h < 300) {
-	  r = x; g = 0; b = c;
-	} else if (300 <= h && h < 360) {
-	  r = c; g = 0; b = x;
-	}
-	r = parseInt(Math.round((r + m) * 255));
-	g = parseInt(Math.round((g + m) * 255));
-	b = parseInt(Math.round((b + m) * 255));
-
-	if (debug) {
-		console.log(h + ", " + s + ", " + l);
-		console.log(r + ", " + g + ", " + b);
-	}
-  
-	return "#" +
-		r.toString(16).padStart(2,"0") +
-		g.toString(16).padStart(2,"0") +
-		b.toString(16).padStart(2,"0");
 }
 function clicarEstado(argEstado) {
 	if (gameState != gameStates.AGUARDAR) {
@@ -584,184 +531,216 @@ function clicarEstado(argEstado) {
 		}
 		estadoSelecionadoAntes = estadoSelecionado;
 		estadoSelecionado = argEstado;
+		tocarSom('somBotaoAplicar');
 		definirGameState(gameStates.ESTADOSELECIONADO);
 	}
 }
-function definirGameState(argGameState,argVoltar = false) {
-	switch (argGameState) {
-		case gameStates.STANDBY: {
-			if (estadoSelecionado!=null) {
-				estadoSelecionado.svg.classList.remove("selecao");
-				estadoSelecionado = null;
-			}
-			spanStatus.innerHTML = "Clique em um estado";
-			let botoes = divBotoesAcoes.getElementsByTagName("button");
-			for (let botao of botoes) {
-				botao.disabled = true;
-			}
-			botaoRodarTurno.disabled = false;
-			botaoRodarTurno.innerHTML = "RODAR TURNO";
-		} break;
-		case gameStates.ESTADOSELECIONADO: {
-			if ((gameState == gameStates.ATACARESTADO)
-			|| (gameState == gameStates.CONSTRUIRMURO)) {
-				if (argVoltar) {
-					divBotoesAcoes.classList.remove("cancelar");
-					estadoSelecionado.vizinhos.forEach(vizinho => {
-						vizinho.svg.classList.remove("atacar");
-						vizinho.svg.classList.remove("murar");
-					});
-					if (estadoSelecionado.acessoAgua) {
-						estados.forEach(estado => {
-							if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
-								estado.svg.classList.remove("atacar");
-							}
-						});
-					}
-				} else {
-					let ataquePorAgua = false;
-					if (!estadoSelecionadoAntes.vizinhos.includes(estadoSelecionado)) {
-						if (gameState == gameStates.ATACARESTADO && estadoSelecionadoAntes.acessoAgua && estadoSelecionado.acessoAgua) {
-							ataquePorAgua = true;
-						} else {
-							alert("O território selecionado não é acessível por este território.");
-							estadoSelecionado = estadoSelecionadoAntes;
-							return;
-						}
-					}
-					if ((estadoSelecionadoAntes.controlador === estadoSelecionado.controlador)
-						&& (gameState == gameStates.ATACARESTADO)) {
-						alert("Não se pode atacar seu próprio território!");
-						estadoSelecionado = estadoSelecionadoAntes;
+async function definirGameState(argGameState,argVoltar = false) {
+    switch (argGameState) {
+        case gameStates.STANDBY: {
+            if (estadoSelecionado!=null) {
+                estadoSelecionado.svg.classList.remove("selecao");
+                estadoSelecionado = null;
+            }
+            spanStatus.innerHTML = "Clique em um estado";
+            let botoes = divBotoesAcoes.getElementsByTagName("button");
+            for (let botao of botoes) {
+                botao.disabled = true;
+            }
+            botaoRodarTurno.disabled = false;
+            botaoRodarTurno.innerHTML = "RODAR TURNO";
+        } break;
+        case gameStates.ESTADOSELECIONADO: {
+            if ((gameState == gameStates.ATACARESTADO)
+            || (gameState == gameStates.CONSTRUIRMURO)) {
+                if (argVoltar) {
+                    divBotoesAcoes.classList.remove("cancelar");
+                    estadoSelecionado.vizinhos.forEach(vizinho => {
+                        vizinho.svg.classList.remove("atacar");
+                        vizinho.svg.classList.remove("murar");
+                    });
+                    if (estadoSelecionado.acessoAgua) {
+                        estados.forEach(estado => {
+                            if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
+                                estado.svg.classList.remove("atacar");
+                            }
+                        });
+                    }
+                } else {
+                    let ataquePorAgua = false;
+					if (estadoSelecionadoAntes === estadoSelecionado) {
 						return;
 					}
-					if (gameState == gameStates.CONSTRUIRMURO) {
-						if (muros.some(muro => 
-							(muro.estado1 === estadoSelecionadoAntes && muro.estado2 === estadoSelecionado) || 
-							(muro.estado1 === estadoSelecionado && muro.estado2 === estadoSelecionadoAntes))) {
-							alert("Já existe um muro entre esses territórios!");
-							estadoSelecionado = estadoSelecionadoAntes;
-							return;
-						}
-					}
-					let tipoAcao = null;
-					switch (gameState) {
-						case gameStates.ATACARESTADO: tipoAcao = tiposAcoes.ATAQUE; break;
-						case gameStates.CONSTRUIRMURO: tipoAcao = tiposAcoes.DEFESA; break;
-					}
-					let acaoExistente = acoes.find(acao => 
-						acao.origem.id === estadoSelecionadoAntes.id && 
-						acao.tipo === tipoAcao && 
-						(acao.destino ? acao.destino.id === estadoSelecionado.id : true)
-					);
-					if (acaoExistente) {
-						alert("Essa ação já existe!");
-						estadoSelecionado = estadoSelecionadoAntes;
-						return;
-					}
-					divBotoesAcoes.classList.remove("cancelar");
-					new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado,ataquePorAgua);
-					estadoSelecionadoAntes.vizinhos.forEach(vizinho => {
-						vizinho.svg.classList.remove("atacar");
-						vizinho.svg.classList.remove("murar");
-					});
-					if (estadoSelecionado.acessoAgua) {
-						estados.forEach(estado => {
-							if (estado.acessoAgua) {
-								estado.svg.classList.remove("atacar");
-							}
-						});
-					}
-					estadoSelecionado = estadoSelecionadoAntes;
-					definirGameState(gameStates.STANDBY,true);
-					return;
-				}
-			} else {
-				estadoSelecionado.svg.classList.add("selecao");
-			}
-			spanStatus.innerHTML="";
-			
-			let textoLocal = null;
-			textoLocal = document.createElement("p");
-			textoLocal.innerHTML = estadoSelecionado.nome + " <img class='bandeira' src='estrutura/" + estadoSelecionado.imagem + "' title='" + estadoSelecionado.nome + "'>";
-			spanStatus.appendChild(textoLocal);
+                    if (!estadoSelecionadoAntes.vizinhos.includes(estadoSelecionado)) {
+                        if (gameState == gameStates.ATACARESTADO && estadoSelecionadoAntes.acessoAgua && estadoSelecionado.acessoAgua) {
+                            ataquePorAgua = true;
+                        } else {
+                            await customAlert("O território selecionado não é acessível por este território.");
+                            estadoSelecionado = estadoSelecionadoAntes;
+                            return;
+                        }
+                    }
+                    if ((estadoSelecionadoAntes.controlador === estadoSelecionado.controlador)
+                        && (gameState == gameStates.ATACARESTADO)) {
+                        await customAlert("Não se pode atacar seu próprio território!");
+                        estadoSelecionado = estadoSelecionadoAntes;
+                        return;
+                    }
+                    if (gameState == gameStates.CONSTRUIRMURO) {
+                        if (muros.some(muro => 
+                            (muro.estado1 === estadoSelecionadoAntes && muro.estado2 === estadoSelecionado) || 
+                            (muro.estado1 === estadoSelecionado && muro.estado2 === estadoSelecionadoAntes))) {
+                            await customAlert("Já existe um muro entre esses territórios!");
+                            estadoSelecionado = estadoSelecionadoAntes;
+                            return;
+                        }
+                    }
+                    let tipoAcao = null;
+                    switch (gameState) {
+                        case gameStates.ATACARESTADO: tipoAcao = tiposAcoes.ATAQUE; break;
+                        case gameStates.CONSTRUIRMURO: tipoAcao = tiposAcoes.DEFESA; break;
+                    }
+                    let acaoExistente = acoes.find(acao => 
+                        acao.origem.id === estadoSelecionadoAntes.id && 
+                        acao.tipo === tipoAcao && 
+                        (acao.destino ? acao.destino.id === estadoSelecionado.id : true)
+                    );
+                    if (acaoExistente) {
+                        await customAlert("Essa ação já existe!");
+                        estadoSelecionado = estadoSelecionadoAntes;
+                        return;
+                    }
+                    divBotoesAcoes.classList.remove("cancelar");
+                    new Acao(estadoSelecionadoAntes,tipoAcao,estadoSelecionado,ataquePorAgua);
+                    if (multiplayer) {
+                        let mensagem = `\\action ${estadoSelecionadoAntes.id} ${tipoAcao.toUpperCase()} ${estadoSelecionado.id} ${ataquePorAgua}`;
+                        socket.send(mensagem);
+                    }
+                    estadoSelecionadoAntes.vizinhos.forEach(vizinho => {
+                        vizinho.svg.classList.remove("atacar");
+                        vizinho.svg.classList.remove("murar");
+                    });
+                    estadoSelecionado = estadoSelecionadoAntes;
+                    if (estadoSelecionado.acessoAgua) {
+                        estados.forEach(estado => {
+                            if (estado.acessoAgua) {
+                                estado.svg.classList.remove("atacar");
+                            }
+                        });
+                    }
+                    definirGameState(gameStates.STANDBY,true);
+                    return;
+                }
+            } else {
+                estadoSelecionado.svg.classList.add("selecao");
+            }
+            spanStatus.innerHTML="";
+            
+            let textoLocal = null;
+            textoLocal = document.createElement("p");
+            textoLocal.innerHTML = estadoSelecionado.nome + " <img class='bandeira' src='estrutura/" + estadoSelecionado.imagem + "' title='" + estadoSelecionado.nome + "'>";
+            spanStatus.appendChild(textoLocal);
 
-			textoLocal = document.createElement("p");
-			textoLocal.innerHTML = "Controlado por: <img class='bandeira' src='estrutura/" + estadoSelecionado.controlador.imagem + "' title='" + estadoSelecionado.controlador.nome + "'>";
-			spanStatus.appendChild(textoLocal);
+            textoLocal = document.createElement("p");
+            textoLocal.innerHTML = "Controlado por: <img class='bandeira' src='estrutura/" + estadoSelecionado.controlador.imagem + "' title='" + estadoSelecionado.controlador.nome + "'>";
+            spanStatus.appendChild(textoLocal);
 
-			textoLocal = document.createElement("p");
-			textoLocal.innerHTML = "Vidas: " + "♥".repeat(estadoSelecionado.vida);
-			spanStatus.appendChild(textoLocal);
+            textoLocal = document.createElement("p");
+            textoLocal.innerHTML = "Vidas: " + "♥".repeat(estadoSelecionado.vida);
+            spanStatus.appendChild(textoLocal);
 
-			textoLocal = document.createElement("p");
-			textoLocal.innerHTML = `Acesso ao mar: ${estadoSelecionado.acessoAgua ? "Sim" : "Não"}`;
-			spanStatus.appendChild(textoLocal);
+            textoLocal = document.createElement("p");
+            textoLocal.innerHTML = `Acesso ao mar: ${estadoSelecionado.acessoAgua ? "Sim" : "Não"}`;
+            spanStatus.appendChild(textoLocal);
 
-			textoLocal = document.createElement("p");
-			textoLocal.innerHTML = "Vizinhos: ";
-			estadoSelecionado.vizinhos.forEach(vizinho => {
-				let imgVizinho = document.createElement("img");
-				imgVizinho.src = "estrutura/" + vizinho.imagem;
-				imgVizinho.classList.add("bandeira");
-				imgVizinho.title = vizinho.nome;
-				textoLocal.appendChild(imgVizinho);
-			});
-			spanStatus.appendChild(textoLocal);
-			
-			
+            textoLocal = document.createElement("p");
+            textoLocal.innerHTML = "Vizinhos: ";
+            estadoSelecionado.vizinhos.forEach(vizinho => {
+                let imgVizinho = document.createElement("img");
+                imgVizinho.src = "estrutura/" + vizinho.imagem;
+                imgVizinho.classList.add("bandeira");
+                imgVizinho.title = vizinho.nome;
+                textoLocal.appendChild(imgVizinho);
+            });
+            spanStatus.appendChild(textoLocal);
+            
+            
 
 
-			if (estadoSelecionado.controlador==jogador) {
-				let botoes = divBotoesAcoes.getElementsByTagName("button");
-				if (numAcoesMax - numAcoes > 0) {
-					for (let botao of botoes) {
-						botao.disabled = false;
-					}
-				}
-			} else {
-				let botoes = divBotoesAcoes.getElementsByTagName("button");
-				for (let botao of botoes) {
-					botao.disabled = true;
-				}
-			}
-		} break;
-		case gameStates.ATACARESTADO: {
-			divBotoesAcoes.classList.add("cancelar");
-			estadoSelecionado.vizinhos.forEach(vizinho => {
-				if (vizinho.controlador != jogador) {
-					vizinho.svg.classList.add("atacar");
-				}
-			});
-			if (estadoSelecionado.acessoAgua) {
-				estados.forEach(estado => {
-					if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
-						estado.svg.classList.add("atacar");
-					}
-				});
-			}
-		} break;
-		case gameStates.CONSTRUIRMURO: {
-			divBotoesAcoes.classList.add("cancelar");
-			estadoSelecionado.vizinhos.forEach(vizinho => {
-				vizinho.svg.classList.add("murar");
-			});
-		} break;
-		case gameStates.AGUARDAR: {
-			divBotoesAcoes.classList.remove("cancelar");
-			estados.forEach(estado => {
-				estado.svg.classList.remove("atacar", "murar", "selecao");
-			});
-			spanStatus.innerHTML = "Turno em andamento";
-			let botoes = divBotoesAcoes.getElementsByTagName("button");
-			for (let botao of botoes) {
-				botao.disabled = true;
-			}
-			botaoRodarTurno.disabled = true;
-			botaoRodarTurno.innerHTML = "AGUARDE...";
-		}
-	}
-	gameState = argGameState;
+            if (estadoSelecionado.controlador==jogador) {
+                let botoes = divBotoesAcoes.getElementsByTagName("button");
+                if (numAcoesMax - numAcoes > 0) {
+                    for (let botao of botoes) {
+                        botao.disabled = false;
+                    }
+                }
+            } else {
+                let botoes = divBotoesAcoes.getElementsByTagName("button");
+                for (let botao of botoes) {
+                    botao.disabled = true;
+                }
+            }
+        } break;
+        case gameStates.ATACARESTADO: {
+            divBotoesAcoes.classList.add("cancelar");
+            estadoSelecionado.vizinhos.forEach(vizinho => {
+                if (vizinho.controlador != jogador) {
+                    vizinho.svg.classList.add("atacar");
+                }
+            });
+            if (estadoSelecionado.acessoAgua) {
+                estados.forEach(estado => {
+                    if (estado.acessoAgua && estado.controlador!=estadoSelecionado.controlador) {
+                        estado.svg.classList.add("atacar");
+                    }
+                });
+            }
+        } break;
+        case gameStates.CONSTRUIRMURO: {
+            divBotoesAcoes.classList.add("cancelar");
+            estadoSelecionado.vizinhos.forEach(vizinho => {
+                vizinho.svg.classList.add("murar");
+            });
+        } break;
+        case gameStates.AGUARDAR: {
+            divBotoesAcoes.classList.remove("cancelar");
+            estados.forEach(estado => {
+                estado.svg.classList.remove("atacar", "murar", "selecao");
+            });
+            spanStatus.innerHTML = "Turno em andamento";
+            let botoes = divBotoesAcoes.getElementsByTagName("button");
+            for (let botao of botoes) {
+                botao.disabled = true;
+            }
+            botaoRodarTurno.disabled = true;
+            botaoRodarTurno.innerHTML = "AGUARDE...";
+        }
+    }
+    gameState = argGameState;
+}
+async function rodarTurno() {
+    if (numAcoesMax - numAcoes > 0) {
+        const proceed = await customConfirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
+        if (!proceed) {
+            definirGameState(gameStates.STANDBY);
+            return;
+        }
+    }
+    botaoRodarTurno.classList.remove("destaque");
+    if (multiplayer) {
+        logExecucao("Aguardando os demais jogadores...");
+        definirGameState(gameStates.AGUARDAR);
+        socket.send("\\ready");
+    } else {
+        logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+        definirGameState(gameStates.AGUARDAR);
+        etapasTurnos = etapaTurno();
+        exibirOverlayInicio();
+        numTurnos++;
+        intervalosTurnos = setInterval(()=>{
+            etapasTurnos.next();
+        }, tempoTurnos);
+    }
 }
 function atualizarQuantidadeDeAcoes() {
 	const vidaTotal = estados.filter(estado => estado.controlador === jogador)
@@ -769,6 +748,11 @@ function atualizarQuantidadeDeAcoes() {
 	numAcoes = acoes.filter(acao => acao.controlador === jogador).length;
 	numAcoesMax = Math.ceil((vidaTotal)/qtdAmpliaAcoes);
 	spanNumAcoes.innerHTML = "Ações disponíveis: " + (numAcoesMax - numAcoes);
+	if (numAcoesMax - numAcoes > 0) {
+		botaoRodarTurno.classList.remove("destaque");
+	} else {
+		botaoRodarTurno.classList.add("destaque");
+	}
 }
 function acaoReforcar() {
 	if (estadoSelecionado.vida >= 3) {
@@ -777,6 +761,10 @@ function acaoReforcar() {
 	}
 	divBotoesAcoes.classList.remove("cancelar");
 	new Acao(estadoSelecionado,tiposAcoes.REFORCO);
+	if (multiplayer) {
+		let mensagem = `\\action ${estadoSelecionado.id} ${tiposAcoes.REFORCO.toUpperCase()}`;
+		socket.send(mensagem);
+	}
 	definirGameState(gameStates.STANDBY,true);
 }
 function acaoAtacar() {
@@ -788,29 +776,13 @@ function acaoConstruir() {
 function acaoCancelar() {
 	definirGameState(gameStates.ESTADOSELECIONADO,true);
 }
-function rodarTurno() {
-	if (numAcoesMax - numAcoes > 0) {
-		const proceed = confirm("Você ainda tem ações disponíveis. Deseja prosseguir com o turno?");
-		if (!proceed) {
-			definirGameState(gameStates.STANDBY);
-			return;
-		}
-	}
-	logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	definirGameState(gameStates.AGUARDAR);
-	etapasTurnos = etapaTurno();
-	exibirOverlayInicio();
-	numTurnos++;
-	intervalosTurnos = setInterval(()=>{
-		etapasTurnos.next();
-	}, tempoTurnos);
-
-}
 function* etapaTurno() {
-	executarCPUs();
-
-	acoes = acoes.sort(() => Math.random() - 0.5);
 	divListaAcoes.innerHTML = "";
+	if (!multiplayer) {
+		executarCPUs();
+
+		acoes = acoes.sort(() => Math.random() - 0.5);
+	}
 	acoes.forEach(acao => {
 		divListaAcoes.appendChild(acao.el);
 	});
@@ -839,17 +811,22 @@ function* etapaTurno() {
 		}
 	}
 
-	acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
+	if (multiplayer) {
+		socket.send("\\ready");
+	} else {
+		acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
 
-	dataTurno.setMonth(dataTurno.getMonth() + 1);
-	pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
-	logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
-	definirGameState(gameStates.STANDBY);
-	zoomMapa(0);
-	atualizarQuantidadeDeAcoes();
-	clearInterval(intervalosTurnos);
-	if (autoRodar) {
-		rodarTurno();
+		dataTurno.setMonth(dataTurno.getMonth() + 1);
+		pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
+		logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+		definirGameState(gameStates.STANDBY);
+		zoomMapa(0);
+		
+		atualizarQuantidadeDeAcoes();
+		clearInterval(intervalosTurnos);
+		if (autoRodar) {
+			rodarTurno();
+		}
 	}
 }
 function executarCPUs() {
@@ -930,6 +907,168 @@ function verificarJogadores() {
 		}, (tempoTurnos * iteracoesPausa) + 100);
 	}
 }
+//#endregion
+
+
+
+
+
+//#region Funções para GUI
+function confirmarAcao() {
+	dialogConfirmacao.returnValue = 'true';
+	dialogConfirmacao.close();
+}
+function cancelarAcao() {
+	dialogConfirmacao.returnValue = 'false';
+	dialogConfirmacao.close();
+}
+function confirmarPrompt() {
+	dialogPrompt.returnValue = inputPrompt.value;
+	dialogPrompt.close();
+}
+function cancelarPrompt() {
+	dialogPrompt.returnValue = null;
+	dialogPrompt.close();
+}
+function fecharAlerta() {
+	dialogAlerta.close();
+}
+function customConfirm(message) {
+	pTextoConfirmacao.innerText = message;
+	dialogConfirmacao.showModal();
+	return new Promise((resolve) => {
+		dialogConfirmacao.addEventListener('close', () => {
+			resolve(dialogConfirmacao.returnValue === 'true');
+		}, { once: true });
+	});
+}
+function customPrompt(message, defaultValue = '') {
+	pTextoPrompt.innerText = message;
+	inputPrompt.value = defaultValue;
+	dialogPrompt.showModal();
+	return new Promise((resolve) => {
+		dialogPrompt.addEventListener('close', () => {
+			resolve(dialogPrompt.returnValue);
+		}, { once: true });
+	});
+}
+function customAlert(message) {
+	pTextoAlerta.innerText = message;
+	dialogAlerta.showModal();
+	return new Promise((resolve) => {
+		dialogAlerta.addEventListener('close', () => {
+			resolve();
+		}, { once: true });
+	});
+}
+function moverMapa(argX,argY,argRelativo = true) {
+	if (argRelativo) {
+		mapaPosX += argX;
+		mapaPosY += argY;
+	} else {
+		mapaPosX = argX;
+		mapaPosY = argY;
+	}
+	svgMapaObject.style.left = mapaPosX + "px";
+	svgMapaObject.style.top = mapaPosY + "px";
+}
+function zoomMapa(argZoom = 0) {
+	if (argZoom === -0) {
+		let mapaWidth = svgMapaObject.clientWidth;
+		let mapaHeight = svgMapaObject.clientHeight;
+		let parentWidth = divMapa.clientWidth;
+		let parentHeight = divMapa.clientHeight;
+		let scaleX = parentWidth / mapaWidth;
+		let scaleY = parentHeight / mapaHeight;
+
+		let novoZoom = Math.min(scaleX, scaleY);
+		mapaEscala = novoZoom;
+		let posX = ((mapaWidth * novoZoom) / 2) - (divMapa.clientWidth / 2);
+		let posY = ((mapaHeight * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+		moverMapa(-posX, -posY, false);
+	} else {
+		mapaEscala = argZoom;
+	}
+	svgMapaObject.style.transform = `scale(${mapaEscala}) rotateX(${mapaRotX}deg)`;
+}
+function focarEstado(argEstado) {
+	if (!acelerar) {
+		let estadoBBox = argEstado.svg.getBBox();
+		let mapaBBox = svgMapa.getBBox();
+		let estadoBBoxN = {
+			x: (estadoBBox.x / mapaBBox.width) * svgMapaObject.offsetWidth,
+			y: (estadoBBox.y / mapaBBox.height) * svgMapaObject.offsetHeight,
+			width: (estadoBBox.width / mapaBBox.width) * svgMapaObject.offsetWidth,
+			height: (estadoBBox.height / mapaBBox.height) * svgMapaObject.offsetHeight
+		};
+		let scaleX = divMapa.clientWidth / estadoBBoxN.width;
+		let scaleY = divMapa.clientHeight / estadoBBoxN.height;
+		let novoZoom = Math.min(scaleX, scaleY);
+		if (novoZoom > 2) {
+			novoZoom = 2;
+		}
+		zoomMapa(novoZoom);
+		let posX = (estadoBBoxN.x * novoZoom) + ((estadoBBoxN.width * novoZoom) / 2) - (divMapa.clientWidth / 2);
+		let posY = (estadoBBoxN.y * novoZoom) + ((estadoBBoxN.height * novoZoom) / 2) - (divMapa.clientHeight / 2);;
+		//console.log(posX);
+		moverMapa(-posX, -posY, false);
+	}
+}
+function atualizarBarraStatus() {
+	if (jogador == null) {
+		imagemJogador.style.display = "none";
+		pJogador.innerHTML = "Guerra Tática BR";
+	} else {
+		imagemJogador.style.display = null;
+		imagemJogador.src = "estrutura/" + jogador.imagem;
+		imagemJogador.classList.add("bandeira");
+		let texto = "";
+		const estadosControlados = estados.filter(estado => estado.controlador === jogador).length;
+		const vidaTotal = estados.filter(estado => estado.controlador === jogador)
+									.reduce((total, estado) => total + estado.vida, 0);
+		texto += `${estadoJogador.nome} | Estados controlados: ${estadosControlados} (${vidaTotal})`;
+		pJogador.innerHTML = texto;
+	}
+}
+function hslToHex(h,s,l,debug=false) {
+	// Must be fractions of 1
+	s /= 100;
+	l /= 100;
+
+	let c = (1 - Math.abs(2 * l - 1)) * s,
+		x = c * (1 - Math.abs((h / 60) % 2 - 1)),
+		m = l - c/2,
+		r = 0,
+		g = 0,
+		b = 0;
+  
+	if (0 <= h && h < 60) {
+	  r = c; g = x; b = 0;  
+	} else if (60 <= h && h < 120) {
+	  r = x; g = c; b = 0;
+	} else if (120 <= h && h < 180) {
+	  r = 0; g = c; b = x;
+	} else if (180 <= h && h < 240) {
+	  r = 0; g = x; b = c;
+	} else if (240 <= h && h < 300) {
+	  r = x; g = 0; b = c;
+	} else if (300 <= h && h < 360) {
+	  r = c; g = 0; b = x;
+	}
+	r = parseInt(Math.round((r + m) * 255));
+	g = parseInt(Math.round((g + m) * 255));
+	b = parseInt(Math.round((b + m) * 255));
+
+	if (debug) {
+		console.log(h + ", " + s + ", " + l);
+		console.log(r + ", " + g + ", " + b);
+	}
+  
+	return "#" +
+		r.toString(16).padStart(2,"0") +
+		g.toString(16).padStart(2,"0") +
+		b.toString(16).padStart(2,"0");
+}
 function logExecucao(argTexto) {
 	let novoLog = document.createElement("div");
 	novoLog.classList.add("log");
@@ -975,6 +1114,8 @@ function exibirOverlayDerrota(argJogador) {
 	const h1 = document.createElement("h1");
 	h1.innerHTML = `${argJogador.nome} foi derrotado!`;
 
+	tocarSom("somJogadorDerrotado");
+
 	const img = document.createElement("img");
 	img.style.height = "100px";
 	img.src = "estrutura/" + argJogador.imagem;
@@ -1012,6 +1153,8 @@ function exibirOverlayJogadorPerdeu() {
 
 	const h1 = document.createElement("h1");
 	h1.innerHTML = "Você foi derrotado!";
+
+	tocarSom("somFimDerrota");
 
 	const sumario = exibirSumarioPartida();
 
@@ -1054,6 +1197,8 @@ function exibirOverlayVencedor() {
 
 	const h1 = document.createElement("h1");
 	h1.innerHTML = `${vencedor.nome} venceu a partida!`;
+
+	tocarSom("somFimVitoria");
 
 	const img = document.createElement("img");
 	img.style.height = "100px";
@@ -1099,6 +1244,379 @@ function exibirSumarioPartida() {
 
 	return divSumario;
 }
+function abrirConfiguracoes() {
+	if (jogador === null) {
+		dialogPrincipal.close();
+	}
+	dialogConfiguracoes.showModal();
+}
+function fecharConfiguracoes() {
+	dialogConfiguracoes.close();
+	if (jogador === null) {
+		dialogPrincipal.showModal();
+	}
+	
+}
+function tocarSom(idSom) {
+    if (sonsVolume.checked) {
+		const som = document.getElementById(idSom);
+		if (som) {
+			som.currentTime = 0;
+			som.play();
+		}
+    }
+}
+document.querySelectorAll('button').forEach(button => {
+	button.addEventListener('mouseenter', () => {
+		if (!button.disabled) {
+			tocarSom('somBotao');
+		}
+	});
+	button.addEventListener('click', () => {
+		if (!button.disabled) {
+			tocarSom('somBotaoAplicar');
+		}
+	});
+});
+//#endregion
+
+
+
+
+
+//#region Multiplayer
+function obterJSONEstados() {
+    let estadoData = estados.map(estado => ({
+        id: estado.id,
+        //nome: estado.nome,
+        vida: estado.vida,
+        //corMatiz: estado.corMatiz,
+        //corSaturacao: estado.corSaturacao,
+        //cor: estado.cor,
+        //acessoAgua: estado.acessoAgua,
+        controlador: estado.controlador.id,
+        //vizinhos: estado.vizinhos.map(vizinho => vizinho.id)
+    }));
+    
+    let jsonEstados = JSON.stringify(estadoData, (key, value) => {
+        if (typeof value === 'string') {
+            return value.replace(/[\u00C0-\u017F]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+        }
+        return value;
+    });
+	jsonEstados = jsonEstados.replace(/\\\\/g, '\\');
+    
+    return jsonEstados;
+}
+function obterHashEstados() {
+	return md5(obterJSONEstados());
+}
+function entrarSalaIP(servidor = mp_servidor) {
+	if (servidor == mp_servidor) {
+		mp_servidor = prompt("Informe o endereço do servidor:", mp_servidor);
+	} else {
+		mp_servidor = servidor;
+	}
+	const url = `ws://${mp_servidor}:${mp_porta}`;
+	socket = new WebSocket(url);
+
+	socket.onopen = function() {
+		dialogMultijogador.close();
+		exibirLobby();
+	};
+
+	socket.onmessage = function(event) {
+		console.log('SERVIDOR: ' + event.data);
+		let jsonServidor = JSON.parse(event.data);
+		console.log(jsonServidor);
+		switch (jsonServidor.tipo) {
+			case "infoServer":
+				mp_id = parseInt(jsonServidor.conteudo.resourceId);
+				timerPlanejamento = parseInt(jsonServidor.conteudo.timerPlan);
+				break;
+			case "status": 
+				const jogadoresLobby = document.getElementById("jogadoresLobby");
+				jogadoresLobby.innerHTML = "";
+				atualizarJogadoresServidor(jsonServidor.conteudo.jogadores);
+				for (let i = 0; i < jogadores.length; i++) {
+
+					//console.log(jsonServidor.conteudo.jogadores[index]);
+					const jogadorMP = jogadores[i];
+					if (jogadorMP.usuario !== null) {
+						const divJogador = document.createElement("div");
+						divJogador.classList.add("jogadorLobby");
+						jogadorMP.divJogadorLobby = divJogador;
+						
+						const imgJogador = document.createElement("img");
+						imgJogador.src = "estrutura/" + jogadorMP.imagem;
+						imgJogador.classList.add("bandeira");
+						imgJogador.title = jogadorMP.id;
+						divJogador.appendChild(imgJogador);
+
+						const nomeJogador = document.createElement("span");
+						nomeJogador.textContent = jogadorMP.nome;
+						divJogador.appendChild(nomeJogador);
+						
+						jogadoresLobby.appendChild(divJogador);
+
+						if (jogadorMP.usuario === mp_id) {
+							selectTerritorioMP.value = jogadorMP.id;
+							mp_territorio = jogadorMP.id;
+							imagemJogadorMP.src = "estrutura/" + jogadorMP.imagem;
+							imagemJogadorMP.title = jogadorMP.nome;
+							nomeJogadorMP.value = jogadorMP.nome;
+							definirJogador(mp_territorio);
+						}
+					}
+				}
+				break;
+			case "ready":
+				const jogadorPronto = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo);
+				if (jogadorPronto && jogadorPronto.divJogadorLobby) {
+					jogadorPronto.divJogadorLobby.style.backgroundColor = "green";
+				}
+				break;
+			case "notReady":
+				const jogadorNaoPronto = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo);
+				if (jogadorNaoPronto && jogadorNaoPronto.divJogadorLobby) {
+					jogadorNaoPronto.divJogadorLobby.style.backgroundColor = null;
+				}
+				break;
+			case "msg":
+				const divMensagem = document.createElement("div");
+				divMensagem.classList.add("mensagemChat");
+
+				if (jsonServidor.conteudo.remetente === -1) {
+					const textoMensagem = document.createElement("p");
+					textoMensagem.textContent = jsonServidor.conteudo.msg;
+					divMensagem.appendChild(textoMensagem);
+				} else {
+					const jogadorMsg = jogadores.find(jogador => jogador.usuario === jsonServidor.conteudo.remetente);
+
+					const imgJogador = document.createElement("img");
+					imgJogador.src = "estrutura/" + jogadorMsg.imagem;
+					imgJogador.classList.add("bandeira");
+					imgJogador.title = jogadorMsg.id;
+					divMensagem.appendChild(imgJogador);
+
+					const nomeJogador = document.createElement("span");
+					nomeJogador.textContent = jogadorMsg.nome + " diz:";
+					divMensagem.appendChild(nomeJogador);
+
+					const textoMensagem = document.createElement("p");
+					textoMensagem.textContent = jsonServidor.conteudo.msg;
+					divMensagem.appendChild(textoMensagem);
+				}
+
+				document.getElementById("chatLobby").appendChild(divMensagem);
+				divMensagem.scrollIntoView();
+				break;
+			case "plan": {
+				if (gameState === gameStates.LOBBY) {
+					dialogLobby.close();
+					divTitulo.style.display = "none";
+					multiplayer = true;
+					definirJogador(mp_territorio);
+					divBarraInferior.innerHTML="";
+					logExecucao("Bem-vindo ao GuerraTaticaBR!");
+					console.log("Jogo pronto!");
+				}
+				if (gameState === gameStates.AGUARDAR) {
+					acoes.filter(acao => acao.excluir).forEach(acao => acao.apagar());
+					
+					atualizarQuantidadeDeAcoes();
+					clearInterval(intervalosTurnos);
+					dataTurno.setFullYear(parseInt(jsonServidor.conteudo.data.substring(0,4)),parseInt(jsonServidor.conteudo.data.substring(5))-1);
+				}
+				tempoRestantePlan = timerPlanejamento;
+				divTimerPlan.innerHTML = tempoRestantePlan;
+				intervalTimer = setInterval(()=>{
+					if (tempoRestantePlan > 0) {
+						tempoRestantePlan--;
+					}
+					if (tempoRestantePlan <= 5) {
+						tocarSom("somTimer");
+						divTimerPlan.classList.add("timerAviso");
+					} else {
+						divTimerPlan.classList.remove("timerAviso");
+					}
+					divTimerPlan.innerHTML = tempoRestantePlan;
+				},1000);
+				if (jsonServidor.conteudo.hash !== obterHashEstados()) {
+					socket.send("\\updateEstados");
+					return;
+				}
+				definirGameState(gameStates.STANDBY);
+				pturno.innerHTML = `${dataTurno.toLocaleString('default', { month: 'long' }).charAt(0).toUpperCase() + dataTurno.toLocaleString('default', { month: 'long' }).slice(1)} de ${dataTurno.getFullYear()}`;
+				logExecucao(`Rodada de preparo: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+				atualizarBarraStatus();
+				atualizarOverlayRanking();
+				divOverlayAviso.style.display = "none";
+				zoomMapa(0);
+				break;
+			}
+			case "acoes": {
+				acoes.forEach(acao => acao.apagar());
+				divTimerPlan.classList.remove("timerAviso");
+				divTimerPlan.innerHTML = "---";
+				cancelarAcao();
+				cancelarPrompt();
+				fecharAlerta();
+				jsonServidor.conteudo.forEach(acaoData => {
+					console.log(acaoData);
+					const origem = obterEstado(acaoData.origem);
+					const destino = acaoData.destino ? obterEstado(acaoData.destino) : null;
+					const tipo = Object.values(tiposAcoes).find(t => t === acaoData.tipo.toLowerCase());
+					const agua = acaoData.agua;
+
+					if (origem && tipo) {
+						new Acao(origem, tipo, destino, agua);
+					}
+				});
+				clearInterval(intervalTimer);
+				logExecucao(`Turno: ${dataTurno.toLocaleString('default', { month: 'long' })} de ${dataTurno.getFullYear()}`);
+				if (gameState !== gameStates.AGUARDAR) {
+					tocarSom("somTimerAcabou");
+				}
+				definirGameState(gameStates.AGUARDAR);
+				etapasTurnos = etapaTurno();
+				exibirOverlayInicio();
+				numTurnos++;
+				intervalosTurnos = setInterval(()=>{
+					etapasTurnos.next();
+				}, tempoTurnos);
+				break;
+			}
+			case "update": {
+				jsonServidor.conteudo.forEach(estadoData => {
+					const estado = obterEstado(estadoData.id);
+					if (estado) {
+						estado.vida = estadoData.vida;
+						estado.controlador = obterJogador(estadoData.controlador);
+						estado.atualizarSVG();
+					}
+				});
+				break;
+			}
+		}
+	};
+
+	socket.onerror = function(error) {
+		customAlert("Erro: " + error.message);
+	};
+
+	socket.onclose = async function() {
+		dialogLobby.close();
+		dialogMultijogador.close();
+		await customAlert("A sala foi encerrada.");
+		voltarMenuPrincipal();
+	};
+}
+function exibirLobby() {
+	definirGameState(gameStates.LOBBY);
+	dialogLobby.showModal();
+	
+	selectTerritorioMP.innerHTML = "";
+
+	jogadores.forEach(jogador => {
+		const option = document.createElement("option");
+		option.value = jogador.id;
+		option.textContent = jogador.nome;
+		selectTerritorioMP.appendChild(option);
+	});
+
+	selectTerritorioMP.addEventListener("change", (event) => {
+		const selectedOption = event.target.value;
+		const jogadorSelecionado = jogadores.find(jogador => jogador.id === selectedOption);
+		if (jogadorSelecionado) {
+			const imagemJogadorMP = document.getElementById("imagemJogadorMP");
+			imagemJogadorMP.src = "estrutura/" + jogadorSelecionado.imagem;
+			imagemJogadorMP.title = jogadorSelecionado.nome;
+			socket.send("\\linkPlayer "+selectedOption);
+		}
+	});
+
+	nomeJogadorMP.addEventListener("change", (event) => {
+		const novoNome = event.target.value.trim();
+		if (novoNome !== "" && jogador.nome !== novoNome) {
+			socket.send(`\\renamePlayer ${novoNome}`);
+		}
+	});
+}
+function enviarMensagemChat() {
+	const inputMensagem = document.getElementById("mensagemChatLobby");
+	const mensagem = inputMensagem.value.trim();
+	if (mensagem !== "") {
+		socket.send(mensagem);
+		inputMensagem.value = "";
+		inputMensagem.focus();
+
+		const divMensagem = document.createElement("div");
+		divMensagem.classList.add("mensagemChat");
+
+		const imgJogador = document.createElement("img");
+		imgJogador.src = "estrutura/" + jogador.imagem;
+		imgJogador.classList.add("bandeira");
+		imgJogador.title = jogador.id;
+		divMensagem.appendChild(imgJogador);
+
+		const nomeJogador = document.createElement("span");
+		nomeJogador.textContent = "Você diz:";
+		divMensagem.appendChild(nomeJogador);
+
+		const textoMensagem = document.createElement("p");
+		textoMensagem.textContent = mensagem;
+		divMensagem.appendChild(textoMensagem);
+
+		document.getElementById("chatLobby").appendChild(divMensagem);
+		divMensagem.scrollIntoView();
+	}
+}
+document.getElementById("mensagemChatLobby").addEventListener("keydown", function(event) {
+	if (event.key === "Enter") {
+		enviarMensagemChat();
+	}
+});
+function sairSala() {
+	socket.close();
+	dialogLobby.close();
+	voltarMenuPrincipal();
+}
+function atualizarJogadoresServidor(argJSONJogadores) {
+	jogadores.forEach(jogador => {
+		const jogadorData = argJSONJogadores.find(j => j.id === jogador.id);
+		if (jogadorData) {
+			jogador.nome = jogadorData.nome;
+			jogador.usuario = jogadorData.jogador;
+			jogador.cpu = false;
+		} else {
+			jogador.nome = jogador.nomeEstado;
+			jogador.usuario = null;
+			jogador.cpu = true;
+		}
+	});
+}
+function mpEstouPronto() {
+	mp_pronto = !mp_pronto;
+	if (mp_pronto) {
+		socket.send("\\ready");
+		botaoProntoMP.style.backgroundColor = "green";
+	} else {
+		socket.send("\\notReady");
+		botaoProntoMP.style.backgroundColor = "";
+	}
+	selectTerritorioMP.disabled = mp_pronto;
+	nomeJogadorMP.disabled = mp_pronto;
+}
+function voltarMenuPrincipal() {
+	dialogEscolhaJogador.close();
+	dialogMultijogador.close();
+	dialogLobby.close();
+	dialogConfiguracoes.close();
+	dialogPrincipal.showModal();
+	divTitulo.style.display = null;
+	iniciarEstados();
+}
 //#endregion
 
 
@@ -1107,10 +1625,22 @@ function exibirSumarioPartida() {
 
 //#region Inicialização
 async function inicializar() {
+	pLoader.innerHTML = "";
+	svgMapa = svgMapaObject.contentDocument.documentElement;
+	iniciarEstados();
+	dialogPrincipal.showModal();
+	//entrarSalaIP("localhost");
+	//rodarTurno();
+	//exibirOverlayJogadorPerdeu();
+}
+function exibirUmJogador() {
+	dialogPrincipal.close();
+	dialogEscolhaJogador.showModal();
+}
+function iniciarUmJogador() {
 	console.log("Inicializando...");
 	inicializado = true;
-	svgMapa = await svgMapaObject.contentDocument.documentElement;
-	await iniciarEstados();
+	
 	definirGameState(gameStates.STANDBY);
 	divBarraInferior.innerHTML="";
 	logExecucao("Bem-vindo ao GuerraTaticaBR!");
@@ -1120,12 +1650,14 @@ async function inicializar() {
 	atualizarBarraStatus();
 	atualizarOverlayRanking();
 	divOverlayAviso.style.display = "none";
+	divTimerPlan.style.display = "none";
 	zoomMapa(0);
-	pLoader.innerHTML = "";
-	dialogEscolhaJogador.show();
-	//rodarTurno();
-	//exibirOverlayJogadorPerdeu();
 }
+function iniciarMultijogador() {
+	dialogPrincipal.close();
+	dialogMultijogador.showModal();
+}
+
 console.log("Carregado");
 var carregarConteudo = setInterval((e)=>{
 	if (svgMapaObject.contentDocument.readyState === 'complete' && !inicializado) {
