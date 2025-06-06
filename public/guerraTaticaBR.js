@@ -1317,7 +1317,9 @@ function entrarSalaIP(servidor = mp_servidor) {
 	} else {
 		mp_servidor = servidor;
 	}
-	const protocolo = (location.protocol === "https:") ? "wss" : "ws";
+	const protocolo = (location.protocol && location.protocol.indexOf("http") !== -1) 
+		? ((location.protocol === "https:") ? "wss" : "ws") 
+		: "wss";
     const url = `${protocolo}://${mp_servidor}:${mp_porta}`;
     socket = new WebSocket(url);
 
