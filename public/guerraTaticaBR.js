@@ -1317,19 +1317,14 @@ function entrarSalaIP(servidor = mp_servidor) {
 	} else {
 		mp_servidor = servidor;
 	}
-	try {
-		const url = `ws://${mp_servidor}:${mp_porta}`;
-		socket = new WebSocket(url);
-	} catch (error) {
-		console.error("Failed to connect using WS, trying WSS...");
-		const url = `wss://${mp_servidor}:${mp_porta}`;
-		socket = new WebSocket(url);
-	}
+	const protocolo = (location.protocol === "https:") ? "wss" : "ws";
+    const url = `${protocolo}://${mp_servidor}:${mp_porta}`;
+    socket = new WebSocket(url);
 
-	socket.onopen = function() {
-		dialogMultijogador.close();
-		exibirLobby();
-	};
+    socket.onopen = function() {
+        dialogMultijogador.close();
+        exibirLobby();
+    };
 
 	socket.onmessage = function(event) {
 		console.log('SERVIDOR: ' + event.data);

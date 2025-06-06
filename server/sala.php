@@ -241,7 +241,7 @@ class Connection {
     }
 
     public function send($msg) {
-        fwrite($this->socket, $msg);
+        fwrite($this->socket, encodeMessage($msg));
     }
 
     public function close() {
@@ -486,16 +486,26 @@ $estadoPartida = EstadoPartida::LOBBY;
 $tempoPlanejamento = 30; // segundos
 $inicioPlanejamento = null;
 $chat = new Chat();
-$context = stream_context_create([
-    'ssl' => [
-        'local_cert' => '/path/to/your/cert.pem',
-        'local_pk' => '/path/to/your/key.pem',
-        'allow_self_signed' => true,
-        'verify_peer' => false
-    ]
-]);
+$arraySSL = ['ssl' => [
+    'local_cert' => '/var/www/cert.pem',
+    'local_pk' => '/var/www/key.pem',
+    'allow_self_signed' => true,
+    'verify_peer' => false
+]];
+// Verifica se o arraySSL está ainda na configuração padrão e interrompe o processamento caso sim
+if ($arraySSL['ssl']['local_cert'] === '/path/to/your/cert.pem' || $arraySSL['ssl']['local_pk'] === '/path/to/your/key.pem') {
+    die("Por favor, configure os caminhos corretos para o certificado e a chave SSL.\n");
+}
+//Verifica se os arquivos informados no arraySSL existem e são acessíveis pelo PHP
+if (!file_exists($arraySSL['ssl']['local_cert']) || !is_readable($arraySSL['ssl']['local_cert'])) {
+    die("Certificado SSL não encontrado ou não acessível: " . $arraySSL['ssl']['local_cert'] . "\n");
+}
+if (!file_exists($arraySSL['ssl']['local_pk']) || !is_readable($arraySSL['ssl']['local_pk'])) {
+    die("Chave SSL não encontrada ou não acessível: " . $arraySSL['ssl']['local_pk'] . "\n");
+}
 
-$server = stream_socket_server("tcp://0.0.0.0:12346", $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
+$context = stream_context_create($arraySSL);
+$server = stream_socket_server("ssl://0.0.0.0:12346", $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 if (!$server) {
     registrarNoLog("Erro ao abrir o servidor: $errstr ($errno)");
     die();
@@ -751,7 +761,7 @@ function perform_handshaking($received_header, $client_conn, $host, $port) {
         return;
     }
     $secKey = $headers['Sec-WebSocket-Key'];
-    $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+    $secAccept = base64_encode(sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true));
 
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? 'wss' : 'ws';
     $location = "{$protocol}://$host:$port";
