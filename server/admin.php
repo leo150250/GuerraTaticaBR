@@ -1,7 +1,21 @@
 <?php
 echo "<pre>";
 
-$pathServidor = $_SERVER['DOCUMENT_ROOT'] . "/gtbrserver/";
+$pathServidor = $_SERVER['DOCUMENT_ROOT'] . "/GuerraTaticaBR/server/";
+
+// Verifica se a pasta de dados existe. Se não, cria ela, pois é uma instalação limpa.
+if (!is_dir($pathServidor . "sistema/.dados/")) {
+    try {
+        echo "Criando pasta de dados do sistema...\n";
+        mkdir($pathServidor . "sistema/.dados/", 0777, true);
+        //Gera o HTACCESS para proteger a pasta de dados
+        file_put_contents($pathServidor . "sistema/.dados/.htaccess", "Deny from all\n");
+        echo "Pasta de dados criada com sucesso em " . $pathServidor . "sistema/.dados/\n";
+    } catch (Exception $e) {
+        die("Erro ao criar a pasta de dados do sistema: " . $e->getMessage()."\n");
+    }
+}
+
 // Define the path to the JSON file
 $jsonFilePath = $pathServidor . "sistema/.dados/salas.json";
 

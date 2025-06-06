@@ -1,4 +1,5 @@
 /server/sistema/.dados/salas.json
+/server/sistema/.dados/.htaccess
 /server/sistema/.dados/*_log.txt
 /server/sistema/.dados/*_override.json
 /server/sistema/.dados/*_estrutura.json
