@@ -259,13 +259,13 @@ class Chat {
         $this->clients[(int)$conn->resourceId] = $conn;
         registrarNoLog("Nova conexão: ({$conn->resourceId})");
         global $tempoPlanejamento;
-        $conn->send(encodeMessage(json_encode([
+        $conn->send(json_encode([
             'tipo' => 'infoServer',
             'conteudo' => [
                 'resourceId' => $conn->resourceId,
                 'timerPlan' => $tempoPlanejamento
             ]
-        ])));
+        ]));
         global $jogadores, $estadoPartida;
         if ($estadoPartida === EstadoPartida::LOBBY) {
             $jogadoresSemConexao = array_filter($jogadores, function($jogador) {
@@ -280,12 +280,12 @@ class Chat {
                 'conteudo' => json_decode(obterStatusPartida())
             ]);
             foreach ($this->clients as $client) {
-                $client->send(encodeMessage($status));
-                $client->send(encodeMessage(json_encode([
+                $client->send($status);
+                $client->send(json_encode([
                             "tipo"=>"msg",
                             "conteudo"=>[
                                 "remetente"=>-1,
-                                "msg"=>"{$jogadorAleatorio->nome} entrou na sala"]])));
+                                "msg"=>"{$jogadorAleatorio->nome} entrou na sala"]]));
             }
         }
     }
@@ -308,22 +308,22 @@ class Chat {
                     break;
                 case 'check':
                     $status = obterStatusPartida();
-                    $from->send(encodeMessage($status));
+                    $from->send($status);
                     registrarNoLog($status);
                     break;
                 case 'updateEstados':
                     $jsonEstados = obterJSONEstados();
-                    $from->send(encodeMessage(json_encode([
+                    $from->send(json_encode([
                         'tipo' => 'update',
                         'conteudo' => $jsonEstados])
-                    ));
+                    );
                     registrarNoLog("Jogador {$from->resourceId} solicitou atualização dos estados");
                     break;
                 case 'nextTurn':
                     avancarDataRodada();
                     break;
                 case 'ping':
-                    $from->send(encodeMessage("pong"));
+                    $from->send("pong");
                     break;
                 case 'linkPlayer':
                     $jogadorId = $args[0];
@@ -333,7 +333,7 @@ class Chat {
                         'conteudo' => json_decode(obterStatusPartida())
                     ]);
                     foreach ($this->clients as $client) {
-                        $client->send(encodeMessage($status));
+                        $client->send($status);
                     }
                     break;
                 case 'renamePlayer':
@@ -345,7 +345,7 @@ class Chat {
                         'conteudo' => json_decode(obterStatusPartida())
                     ]);
                     foreach ($this->clients as $client) {
-                        $client->send(encodeMessage($status));
+                        $client->send($status);
                     }
                     break;
                 case 'action':
@@ -362,7 +362,7 @@ class Chat {
                             $tipo = TipoAcao::REFORCO;
                             break;
                         default:
-                            $from->send(encodeMessage("Tipo de ação desconhecido"));
+                            $from->send("Tipo de ação desconhecido");
                             return;
                     }
                     $destinoId = $args[2] ?? null;
@@ -398,7 +398,7 @@ class Chat {
                         'conteudo' => $from->resourceId
                     ]);
                     foreach ($this->clients as $client) {
-                        $client->send(encodeMessage($readyMessage));
+                        $client->send($readyMessage);
                     }
                     $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
                     registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
@@ -416,7 +416,7 @@ class Chat {
                         'conteudo' => $from->resourceId
                     ]);
                     foreach ($this->clients as $client) {
-                        $client->send(encodeMessage($readyMessage));
+                        $client->send($readyMessage);
                     }
                     $remainingPlayers = count($humanPlayers) - $numJogadoresProntos;
                     registrarNoLog("Aguardando mais {$remainingPlayers} jogadores");
@@ -432,11 +432,11 @@ class Chat {
                 $from->resourceId, $msg, $numRecv));
             foreach ($this->clients as $client) {
                 if ($from !== $client) {
-                    $client->send(encodeMessage(json_encode([
+                    $client->send(json_encode([
                         "tipo"=>"msg",
                         "conteudo"=>[
                             "remetente"=>$from->resourceId,
-                            "msg"=>$msg]])));
+                            "msg"=>$msg]]));
                 }
             }
         }
@@ -486,12 +486,10 @@ $estadoPartida = EstadoPartida::LOBBY;
 $tempoPlanejamento = 30; // segundos
 $inicioPlanejamento = null;
 $chat = new Chat();
-$arraySSL = ['ssl' => [
-    'local_cert' => '/var/www/cert.pem',
-    'local_pk' => '/var/www/key.pem',
-    'allow_self_signed' => true,
-    'verify_peer' => false
-]];
+$arraySSL = json_decode(file_get_contents(__DIR__ . '/sistema/.dados/ssl.json'), true);
+if (json_last_error() !== JSON_ERROR_NONE) {
+    die("Erro ao ler ou decodificar o arquivo ssl.json\n");
+}
 // Verifica se o arraySSL está ainda na configuração padrão e interrompe o processamento caso sim
 if ($arraySSL['ssl']['local_cert'] === '/path/to/your/cert.pem' || $arraySSL['ssl']['local_pk'] === '/path/to/your/key.pem') {
     die("Por favor, configure os caminhos corretos para o certificado e a chave SSL.\n");
@@ -606,13 +604,13 @@ function iniciarPlanejamento() {
     $inicioPlanejamento = time();
     foreach ($chat->obterClientes() as $client) {
         if ($client instanceof Connection) {
-            $client->send(encodeMessage(json_encode([
+            $client->send(json_encode([
                 "tipo" => "plan",
                 "conteudo" => [
                     'data' => $dataTurno->format('Y-m'),
                     'hash' => obterHashEstados(),
                 ]
-            ])));
+            ]));
         }
     }
     $numJogadoresProntos = 0;
@@ -634,10 +632,10 @@ function iniciarExecucao() {
     $jsonAcoes = obterJSONAcoes();
     foreach ($chat->obterClientes() as $client) {
         if ($client instanceof Connection) {
-            $client->send(encodeMessage(json_encode([
+            $client->send(json_encode([
                 'tipo' => 'acoes',
                 'conteudo' => json_decode($jsonAcoes)
-            ])));
+            ]));
         }
     }
 
@@ -647,7 +645,7 @@ function iniciarExecucao() {
     ]);
     foreach ($chat->obterClientes() as $client) {
         if ($client instanceof Connection) {
-            $client->send(encodeMessage($status));
+            $client->send($status);
         }
     }
     executarAcoes();
@@ -684,13 +682,13 @@ function verificarEstadoPartida() {
                     registrarNoLog("Iniciando partida em {$timerIniciarPartidaLobby}...");
                     foreach ($chat->obterClientes() as $client) {
                         if ($client instanceof Connection) {
-                            $client->send(encodeMessage(json_encode([
+                            $client->send(json_encode([
                                 "tipo" => "msg",
                                 "conteudo" => [
                                     "remetente" => -1,
                                     "msg" => "A partida vai começar em {$timerIniciarPartidaLobby} segundos"
                                 ]
-                            ])));
+                            ]));
                         }
                     }
                     $timerIniciarPartidaLobby--;
@@ -763,15 +761,14 @@ function perform_handshaking($received_header, $client_conn, $host, $port) {
     $secKey = $headers['Sec-WebSocket-Key'];
     $secAccept = base64_encode(sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true));
 
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? 'wss' : 'ws';
+    //$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? 'wss' : 'ws';
+    $protocol = 'wss';
     $location = "{$protocol}://$host:$port";
 
-    $upgrade = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
+    $upgrade = "HTTP/1.1 101 Switching Protocols\r\n" .
                "Upgrade: websocket\r\n" .
                "Connection: Upgrade\r\n" .
-               "Sec-WebSocket-Accept: $secAccept\r\n" .
-               "Sec-WebSocket-Protocol: $protocol\r\n" .
-               "Sec-WebSocket-Version: 13\r\n\r\n";
+               "Sec-WebSocket-Accept: $secAccept\r\n\r\n";
     fwrite($client_conn, $upgrade);
 }
 
@@ -797,15 +794,16 @@ function unmask($payload) {
 }
 
 function encodeMessage($msg) {
-    $b1 = 0x80 | (0x1 & 0x0f); // 0x1 text frame (FIN + opcode)
+    $b1 = 0x80 | (0x1 & 0x0f); // FIN + opcode (text)
     $length = strlen($msg);
 
     if ($length <= 125) {
         $header = pack('CC', $b1, $length);
-    } elseif ($length > 125 && $length < 65536) {
+    } elseif ($length <= 65535) {
         $header = pack('CCn', $b1, 126, $length);
     } else {
-        $header = pack('CCNN', $b1, 127, $length);
+        // 64 bits: PHP não tem pack 'J' em todo sistema, então use gmp or split em 2x32 bits
+        $header = pack('CCNN', $b1, 127, 0, $length); // Funciona para mensagens < 4GB
     }
 
     return $header . $msg;

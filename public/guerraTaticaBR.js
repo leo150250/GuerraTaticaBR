@@ -83,7 +83,7 @@ var tempoRestantePlan = 0;
 var intervalTimer= null;
 
 var multiplayer = false;
-var mp_servidor = "teste";
+var mp_servidor = "vps59303.publiccloud.com.br";
 var mp_porta = 12346
 var mp_id = 0;
 var socket = null;
