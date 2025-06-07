@@ -1,0 +1,27 @@
+name: Deploy to FTP
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Deploy para o cliente
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.ServidorFTPSite }}
+          username: ${{ secrets.UsuarioFTPSite }}
+          password: ${{ secrets.SenhaFTPSite }}
+          local-dir: "./public/"
+          server-dir: "/public_html/jogos/gtbr/"
+      - name: Deploy para o S01
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.ServidorFTPS01 }}
+          username: ${{ secrets.UsuarioFTPS01 }}
+          password: ${{ secrets.SenhaFTPS01 }}
+          local-dir: "./server/"
+          server-dir: "/var/www/html/gtbr/"
