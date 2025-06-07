@@ -23,5 +23,6 @@ jobs:
           server: ${{ secrets.ServidorFTPS01 }}
           username: ${{ secrets.UsuarioFTPS01 }}
           password: ${{ secrets.SenhaFTPS01 }}
+          protocol: "ftps"
           local-dir: "./server/"
           server-dir: "/var/www/html/gtbr/"
